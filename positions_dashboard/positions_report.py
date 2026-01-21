@@ -68,7 +68,7 @@ def load_commtech_cohorts():
         return pd.read_sql(sql, conn)
 
 # -------------------------------------------------
-# PRICE MOVE BUCKETS
+# MOVE BUCKETS
 # -------------------------------------------------
 def classify_move(x):
     if x > 3:
@@ -88,41 +88,16 @@ def classify_move(x):
     else:
         return "> 3% down"
 
-# -------------------------------------------------
-# INTRADAY BUCKET TABLE
-# -------------------------------------------------
-def build_intraday_bucket_table(df):
-    tmp = (
-        df.groupby(["snapshot_ts", "move_bucket"])
-        .agg(names=("ticker", "nunique"))
-        .reset_index()
-    )
-
-    tmp["time_label"] = (
-        pd.to_datetime(tmp["snapshot_ts"])
-        .dt.tz_convert("US/Central")
-        .dt.strftime("%H:%M")
-    )
-
-    bucket_order = [
-        "> 3% up",
-        "2–3% up",
-        "1–2% up",
-        "< 1% up",
-        "< 1% down",
-        "1–2% down",
-        "2–3% down",
-        "> 3% down",
-    ]
-
-    pivot = (
-        tmp.pivot(index="move_bucket", columns="time_label", values="names")
-        .reindex(bucket_order)
-        .fillna(0)
-        .astype(int)
-    )
-
-    return pivot
+BUCKET_ORDER = [
+    "> 3% up",
+    "2–3% up",
+    "1–2% up",
+    "< 1% up",
+    "< 1% down",
+    "1–2% down",
+    "2–3% down",
+    "> 3% down",
+]
 
 # -------------------------------------------------
 # LOAD DATA
@@ -133,126 +108,176 @@ if intraday.empty:
     st.warning("No position data available yet.")
     st.stop()
 
-intraday["move_bucket"] = intraday["price_change_pct"].apply(classify_move)
+intraday["snapshot_ts"] = pd.to_datetime(intraday["snapshot_ts"])
+intraday["time_label"] = (
+    intraday["snapshot_ts"]
+    .dt.tz_convert("US/Central")
+    .dt.strftime("%H:%M")
+)
 
 latest_ts = intraday["snapshot_ts"].max()
 latest = intraday[intraday["snapshot_ts"] == latest_ts]
 
 # -------------------------------------------------
-# PORTFOLIO – INTRADAY SUMMARY
+# TABS
 # -------------------------------------------------
-st.header("📌 Portfolio Price-Move Summary (Intraday)")
-
-bucket_table = build_intraday_bucket_table(intraday)
-
-st.caption(
-    "Counts show the number of names in each price-move bucket at every "
-    "30-minute snapshot (CST). Right-most column is the latest snapshot."
+tab_sector, tab_price = st.tabs(
+    ["🏭 Sector Driven", "📈 Price Change Driven"]
 )
 
-st.dataframe(bucket_table, width="stretch")
+# =================================================
+# TAB 1 — SECTOR DRIVEN
+# =================================================
+with tab_sector:
+    st.header("🏭 Sector-Driven Intraday Performance")
 
-# -------------------------------------------------
-# DRILL-DOWN
-# -------------------------------------------------
-st.header("🔎 Drill-Down (Latest Snapshot)")
-
-selected_bucket = st.selectbox(
-    "Select Price-Move Bucket",
-    bucket_table.index
-)
-
-bucket_df = latest[latest["move_bucket"] == selected_bucket]
-
-# -------------------------------------------------
-# SECTOR VIEW
-# -------------------------------------------------
-st.subheader(f"🏭 Sector Breakdown – {selected_bucket}")
-
-st.caption(
-    "Average Move is an **equal-weighted average** of price_change_pct across names. "
-    "It is **not weighted** by position size, NMV, or gross notional."
-)
-
-sector_view = (
-    bucket_df
-    .groupby("egm_sector_v2")
-    .agg(
-        names=("ticker", "nunique"),
-        net_nmv=("nmv", "sum"),
-        avg_move=("price_change_pct", "mean"),
+    st.caption(
+        "Sector value is calculated as Σ (Quantity × Fair Value). "
+        "Moves are measured versus the previous 30-minute snapshot."
     )
-    .reset_index()
-    .sort_values("net_nmv", ascending=False)
-)
 
-st.dataframe(sector_view, width="stretch")
+    # ---- sector value per snapshot
+    sector_values = (
+        intraday
+        .assign(sector_value=lambda x: x["quantity"] * x["fair_value"])
+        .groupby(["snapshot_ts", "time_label", "egm_sector_v2"])
+        .agg(total_value=("sector_value", "sum"))
+        .reset_index()
+        .sort_values("snapshot_ts")
+    )
 
-selected_sector = st.selectbox(
-    "Select Sector",
-    sector_view["egm_sector_v2"].dropna().unique()
-)
+    # ---- compute % change vs previous snapshot
+    sector_values["prev_value"] = (
+        sector_values
+        .groupby("egm_sector_v2")["total_value"]
+        .shift(1)
+    )
 
-sector_df = bucket_df[bucket_df["egm_sector_v2"] == selected_sector]
+    sector_values["pct_change"] = (
+        (sector_values["total_value"] - sector_values["prev_value"])
+        / sector_values["prev_value"]
+        * 100
+    )
 
-# -------------------------------------------------
-# COMM/TECH → COHORT VIEW
-# -------------------------------------------------
-if selected_sector == "Comm/Tech":
-    st.subheader("🧩 Comm/Tech – Cohort Breakdown")
+    sector_values["move_bucket"] = sector_values["pct_change"].apply(
+        lambda x: classify_move(x) if pd.notna(x) else None
+    )
 
-    cohorts = load_commtech_cohorts()
-    ct_df = sector_df.merge(cohorts, on="ticker", how="inner")
+    # ---- pivot table
+    pivot = (
+        sector_values
+        .pivot(
+            index="egm_sector_v2",
+            columns="time_label",
+            values="move_bucket"
+        )
+        .reindex(sorted(sector_values["egm_sector_v2"].dropna().unique()))
+    )
 
-    if ct_df.empty:
-        st.info("No Comm/Tech cohort data available.")
-        final_df = sector_df
-    else:
-        cohort_view = (
-            ct_df
-            .groupby("cohort_name")
-            .agg(
-                names=("ticker", "nunique"),
-                net_nmv=("nmv", "sum"),
-                avg_move=("price_change_pct", "mean"),
+    st.dataframe(pivot, width="stretch")
+
+# =================================================
+# TAB 2 — PRICE CHANGE DRIVEN (existing logic)
+# =================================================
+with tab_price:
+    st.header("📈 Price Change–Driven Analysis")
+
+    intraday["move_bucket"] = intraday["price_change_pct"].apply(classify_move)
+
+    # ---- bucket table
+    bucket_table = (
+        intraday
+        .groupby(["time_label", "move_bucket"])
+        .agg(names=("ticker", "nunique"))
+        .reset_index()
+        .pivot(index="move_bucket", columns="time_label", values="names")
+        .reindex(BUCKET_ORDER)
+        .fillna(0)
+        .astype(int)
+    )
+
+    st.caption(
+        "Counts show number of names in each price-move bucket "
+        "at each 30-minute snapshot (CST)."
+    )
+
+    st.dataframe(bucket_table, width="stretch")
+
+    # ---- drill-down
+    selected_bucket = st.selectbox(
+        "Select Price-Move Bucket",
+        BUCKET_ORDER,
+    )
+
+    bucket_df = latest[latest["move_bucket"] == selected_bucket]
+
+    st.subheader(f"🏭 Sector Breakdown – {selected_bucket}")
+
+    sector_view = (
+        bucket_df
+        .groupby("egm_sector_v2")
+        .agg(
+            names=("ticker", "nunique"),
+            net_nmv=("nmv", "sum"),
+            avg_move=("price_change_pct", "mean"),
+        )
+        .reset_index()
+        .sort_values("net_nmv", ascending=False)
+    )
+
+    st.dataframe(sector_view, width="stretch")
+
+    selected_sector = st.selectbox(
+        "Select Sector",
+        sector_view["egm_sector_v2"].dropna().unique()
+    )
+
+    sector_df = bucket_df[bucket_df["egm_sector_v2"] == selected_sector]
+
+    # ---- Comm/Tech cohorts
+    if selected_sector == "Comm/Tech":
+        st.subheader("🧩 Comm/Tech – Cohort Breakdown")
+
+        cohorts = load_commtech_cohorts()
+        ct_df = sector_df.merge(cohorts, on="ticker", how="inner")
+
+        if not ct_df.empty:
+            cohort_view = (
+                ct_df
+                .groupby("cohort_name")
+                .agg(
+                    names=("ticker", "nunique"),
+                    net_nmv=("nmv", "sum"),
+                    avg_move=("price_change_pct", "mean"),
+                )
+                .reset_index()
+                .sort_values("net_nmv", ascending=False)
             )
-            .reset_index()
-            .sort_values("net_nmv", ascending=False)
-        )
 
-        st.dataframe(cohort_view, width="stretch")
+            st.dataframe(cohort_view, width="stretch")
 
-        selected_cohort = st.selectbox(
-            "Select Cohort",
-            cohort_view["cohort_name"].unique()
-        )
+            selected_cohort = st.selectbox(
+                "Select Cohort",
+                cohort_view["cohort_name"].unique()
+            )
 
-        final_df = ct_df[ct_df["cohort_name"] == selected_cohort]
-else:
-    final_df = sector_df
+            sector_df = ct_df[ct_df["cohort_name"] == selected_cohort]
 
-# -------------------------------------------------
-# FINAL INSTRUMENT VIEW
-# -------------------------------------------------
-st.subheader("📋 Instrument Detail (Latest Snapshot)")
+    st.subheader("📋 Instrument Detail (Latest Snapshot)")
 
-base_cols = [
-    "ticker",
-    "description",
-    "egm_sector_v2",
-    "quantity",
-    "price_change_pct",
-    "nmv",
-]
+    cols = [
+        "ticker",
+        "description",
+        "egm_sector_v2",
+        "quantity",
+        "price_change_pct",
+        "nmv",
+    ]
 
-# Only show cohort metadata when available
-if "weight_pct" in final_df.columns:
-    base_cols.append("weight_pct")
+    if "weight_pct" in sector_df.columns:
+        cols += ["weight_pct", "is_primary"]
 
-if "is_primary" in final_df.columns:
-    base_cols.append("is_primary")
-
-st.dataframe(
-    final_df[base_cols].sort_values("price_change_pct"),
-    width="stretch",
-)
+    st.dataframe(
+        sector_df[cols].sort_values("price_change_pct"),
+        width="stretch",
+    )
