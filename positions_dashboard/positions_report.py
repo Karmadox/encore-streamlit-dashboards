@@ -136,15 +136,14 @@ with tab_sector:
         "Moves are measured versus the previous 30-minute snapshot."
     )
 
-    # ---- sector value per snapshot
     sector_values = (
-        intraday
-        .assign(sector_value=lambda x: x["quantity"] * x["fair_value"])
-        .groupby(["snapshot_ts", "time_label", "egm_sector_v2"])
-        .agg(total_value=("sector_value", "sum"))
-        .reset_index()
-        .sort_values("snapshot_ts")
-    )
+    intraday
+    .assign(sector_value=intraday["market_value"])
+    .groupby(["snapshot_ts", "time_label", "egm_sector_v2"])
+    .agg(total_value=("sector_value", "sum"))
+    .reset_index()
+    .sort_values("snapshot_ts")
+    )   
 
     # ---- compute % change vs previous snapshot
     sector_values["prev_value"] = (
