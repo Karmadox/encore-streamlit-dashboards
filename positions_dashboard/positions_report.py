@@ -62,11 +62,20 @@ def load_commtech_cohorts():
             c.cohort_name,
             w.weight_pct
         FROM encoredb.instrument_cohort_weights w
-        JOIN encoredb.cohorts c ON w.cohort_id = c.cohort_id
-        JOIN encoredb.instruments i ON w.instrument_id = i.instrument_id
-        JOIN encoredb.sectors s ON c.sector_id = s.sector_id
+        JOIN encoredb.cohorts c
+            ON w.cohort_id = c.cohort_id
+        JOIN encoredb.instruments i
+            ON w.instrument_id = i.instrument_id
+        JOIN encoredb.sectors s
+            ON c.sector_id = s.sector_id
         WHERE s.sector_code = 'COMM_TECH'
-          AND w.effective_date = CURRENT_DATE
+          AND w.effective_date = (
+                SELECT MAX(w2.effective_date)
+                FROM encoredb.instrument_cohort_weights w2
+                WHERE w2.instrument_id = w.instrument_id
+                  AND w2.cohort_id = w.cohort_id
+                  AND w2.effective_date <= CURRENT_DATE
+          )
     """
     with get_conn() as conn:
         return pd.read_sql(sql, conn)
