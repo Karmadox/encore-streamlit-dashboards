@@ -108,15 +108,21 @@ if intraday.empty:
     st.warning("No position data available yet.")
     st.stop()
 
+# ---- normalize timestamps
 intraday["snapshot_ts"] = pd.to_datetime(intraday["snapshot_ts"])
+
 intraday["time_label"] = (
     intraday["snapshot_ts"]
     .dt.tz_convert("US/Central")
     .dt.strftime("%H:%M")
 )
 
+# ---- ALWAYS derive move_bucket early
+intraday["move_bucket"] = intraday["price_change_pct"].apply(classify_move)
+
+# ---- latest snapshot
 latest_ts = intraday["snapshot_ts"].max()
-latest = intraday[intraday["snapshot_ts"] == latest_ts]
+latest = intraday[intraday["snapshot_ts"] == latest_ts].copy()
 
 # -------------------------------------------------
 # TABS
@@ -132,20 +138,20 @@ with tab_sector:
     st.header("🏭 Sector-Driven Intraday Performance")
 
     st.caption(
-        "Sector value is calculated as Σ (Quantity × Fair Value). "
+        "Sector value is calculated as Σ Market Value per sector. "
         "Moves are measured versus the previous 30-minute snapshot."
     )
 
     sector_values = (
-    intraday
-    .assign(sector_value=intraday["market_value"])
-    .groupby(["snapshot_ts", "time_label", "egm_sector_v2"])
-    .agg(total_value=("sector_value", "sum"))
-    .reset_index()
-    .sort_values("snapshot_ts")
-    )   
+        intraday
+        .assign(sector_value=intraday["market_value"])
+        .groupby(["snapshot_ts", "time_label", "egm_sector_v2"])
+        .agg(total_value=("sector_value", "sum"))
+        .reset_index()
+        .sort_values("snapshot_ts")
+    )
 
-    # ---- compute % change vs previous snapshot
+    # ---- previous snapshot comparison
     sector_values["prev_value"] = (
         sector_values
         .groupby("egm_sector_v2")["total_value"]
@@ -153,18 +159,21 @@ with tab_sector:
     )
 
     sector_values["pct_change"] = (
-    (sector_values["total_value"] - sector_values["prev_value"])
-    / sector_values["prev_value"].replace(0, pd.NA)
-    * 100
+        (sector_values["total_value"] - sector_values["prev_value"])
+        / sector_values["prev_value"]
+        * 100
     )
 
-    sector_values["pct_change"] = sector_values["pct_change"].fillna(0)
-
-    sector_values["move_bucket"] = sector_values["pct_change"].apply(
-        lambda x: classify_move(x) if pd.notna(x) else None
+    # ---- clean infinities / NaNs
+    sector_values["pct_change"] = (
+        sector_values["pct_change"]
+        .replace([pd.NA, pd.NaT, float("inf"), float("-inf")], 0)
+        .fillna(0)
+        .astype(float)
     )
 
-    # ---- pivot table
+    sector_values["move_bucket"] = sector_values["pct_change"].apply(classify_move)
+
     pivot = (
         sector_values
         .pivot(
@@ -172,20 +181,17 @@ with tab_sector:
             columns="time_label",
             values="move_bucket"
         )
-        .reindex(sorted(sector_values["egm_sector_v2"].dropna().unique()))
+        .sort_index()
     )
 
     st.dataframe(pivot, width="stretch")
 
 # =================================================
-# TAB 2 — PRICE CHANGE DRIVEN (existing logic)
+# TAB 2 — PRICE CHANGE DRIVEN
 # =================================================
 with tab_price:
     st.header("📈 Price Change–Driven Analysis")
 
-    intraday["move_bucket"] = intraday["price_change_pct"].apply(classify_move)
-
-    # ---- bucket table
     bucket_table = (
         intraday
         .groupby(["time_label", "move_bucket"])
@@ -210,7 +216,7 @@ with tab_price:
         BUCKET_ORDER,
     )
 
-    bucket_df = latest[latest["move_bucket"] == selected_bucket]
+    bucket_df = latest[latest["move_bucket"] == selected_bucket].copy()
 
     st.subheader(f"🏭 Sector Breakdown – {selected_bucket}")
 
@@ -233,7 +239,7 @@ with tab_price:
         sector_view["egm_sector_v2"].dropna().unique()
     )
 
-    sector_df = bucket_df[bucket_df["egm_sector_v2"] == selected_sector]
+    sector_df = bucket_df[bucket_df["egm_sector_v2"] == selected_sector].copy()
 
     # ---- Comm/Tech cohorts
     if selected_sector == "Comm/Tech":
@@ -262,7 +268,7 @@ with tab_price:
                 cohort_view["cohort_name"].unique()
             )
 
-            sector_df = ct_df[ct_df["cohort_name"] == selected_cohort]
+            sector_df = ct_df[ct_df["cohort_name"] == selected_cohort].copy()
 
     st.subheader("📋 Instrument Detail (Latest Snapshot)")
 
