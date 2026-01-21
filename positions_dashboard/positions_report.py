@@ -122,7 +122,14 @@ intraday["time_label"] = (
     .dt.strftime("%H:%M")
 )
 
-# ---- ALWAYS derive move_bucket early
+# -------------------------------------------------
+# NORMALISE ENFUSION PRICE CHANGE
+# Enfusion export gives fractional values (0.01 = 1%)
+# Convert to true percentage ONCE
+# -------------------------------------------------
+intraday["price_change_pct"] = intraday["price_change_pct"] * 100
+
+# ---- ALWAYS derive move_bucket after normalization
 intraday["move_bucket"] = intraday["price_change_pct"].apply(classify_move)
 
 # ---- latest snapshot
