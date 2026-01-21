@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import psycopg2
+from streamlit_autorefresh import st_autorefresh
 
 # -------------------------------------------------
 # STREAMLIT CONFIG
@@ -11,8 +12,6 @@ st.set_page_config(
 )
 
 st.title("📊 Encore – Positions Dashboard")
-
-from streamlit_autorefresh import st_autorefresh
 
 # Auto-refresh every 5 minutes
 st_autorefresh(interval=5 * 60 * 1000, key="positions_refresh")
@@ -105,24 +104,20 @@ def build_intraday_bucket_table(df):
         .dt.strftime("%H:%M")
     )
 
+    bucket_order = [
+        "> 3% up",
+        "2–3% up",
+        "1–2% up",
+        "< 1% up",
+        "< 1% down",
+        "1–2% down",
+        "2–3% down",
+        "> 3% down",
+    ]
+
     pivot = (
-        tmp.pivot(
-            index="move_bucket",
-            columns="time_label",
-            values="names"
-        )
-        .reindex(
-            [
-                "> 3% up",
-                "2–3% up",
-                "1–2% up",
-                "< 1% up",
-                "< 1% down",
-                "1–2% down",
-                "2–3% down",
-                "> 3% down",
-            ]
-        )
+        tmp.pivot(index="move_bucket", columns="time_label", values="names")
+        .reindex(bucket_order)
         .fillna(0)
         .astype(int)
     )
@@ -151,11 +146,11 @@ st.header("📌 Portfolio Price-Move Summary (Intraday)")
 bucket_table = build_intraday_bucket_table(intraday)
 
 st.caption(
-    "Table shows the number of names in each price-move bucket at every 30-minute snapshot (CST). "
-    "Right-most column represents the latest snapshot."
+    "Counts show the number of names in each price-move bucket at every "
+    "30-minute snapshot (CST). Right-most column is the latest snapshot."
 )
 
-st.dataframe(bucket_table, use_container_width=True)
+st.dataframe(bucket_table, width="stretch")
 
 # -------------------------------------------------
 # DRILL-DOWN
@@ -175,8 +170,8 @@ bucket_df = latest[latest["move_bucket"] == selected_bucket]
 st.subheader(f"🏭 Sector Breakdown – {selected_bucket}")
 
 st.caption(
-    "Average Move is an **unweighted average** of price_change_pct across names "
-    "(not weighted by position size or NMV)."
+    "Average Move is an **equal-weighted average** of price_change_pct across names. "
+    "It is **not weighted** by position size, NMV, or gross notional."
 )
 
 sector_view = (
@@ -191,7 +186,7 @@ sector_view = (
     .sort_values("net_nmv", ascending=False)
 )
 
-st.dataframe(sector_view, use_container_width=True)
+st.dataframe(sector_view, width="stretch")
 
 selected_sector = st.selectbox(
     "Select Sector",
@@ -211,6 +206,7 @@ if selected_sector == "Comm/Tech":
 
     if ct_df.empty:
         st.info("No Comm/Tech cohort data available.")
+        final_df = sector_df
     else:
         cohort_view = (
             ct_df
@@ -224,7 +220,7 @@ if selected_sector == "Comm/Tech":
             .sort_values("net_nmv", ascending=False)
         )
 
-        st.dataframe(cohort_view, use_container_width=True)
+        st.dataframe(cohort_view, width="stretch")
 
         selected_cohort = st.selectbox(
             "Select Cohort",
@@ -232,27 +228,31 @@ if selected_sector == "Comm/Tech":
         )
 
         final_df = ct_df[ct_df["cohort_name"] == selected_cohort]
-
 else:
     final_df = sector_df
 
 # -------------------------------------------------
 # FINAL INSTRUMENT VIEW
 # -------------------------------------------------
-st.subheader("📋 Instrument Detail")
+st.subheader("📋 Instrument Detail (Latest Snapshot)")
+
+base_cols = [
+    "ticker",
+    "description",
+    "egm_sector_v2",
+    "quantity",
+    "price_change_pct",
+    "nmv",
+]
+
+# Only show cohort metadata when available
+if "weight_pct" in final_df.columns:
+    base_cols.append("weight_pct")
+
+if "is_primary" in final_df.columns:
+    base_cols.append("is_primary")
 
 st.dataframe(
-    final_df[
-        [
-            "ticker",
-            "description",
-            "egm_sector_v2",
-            "quantity",
-            "price_change_pct",
-            "nmv",
-            "weight_pct",
-            "is_primary",
-        ]
-    ].sort_values("price_change_pct"),
-    use_container_width=True
+    final_df[base_cols].sort_values("price_change_pct"),
+    width="stretch",
 )
