@@ -153,10 +153,12 @@ with tab_sector:
     )
 
     sector_values["pct_change"] = (
-        (sector_values["total_value"] - sector_values["prev_value"])
-        / sector_values["prev_value"]
-        * 100
+    (sector_values["total_value"] - sector_values["prev_value"])
+    / sector_values["prev_value"].replace(0, pd.NA)
+    * 100
     )
+
+    sector_values["pct_change"] = sector_values["pct_change"].fillna(0)
 
     sector_values["move_bucket"] = sector_values["pct_change"].apply(
         lambda x: classify_move(x) if pd.notna(x) else None
