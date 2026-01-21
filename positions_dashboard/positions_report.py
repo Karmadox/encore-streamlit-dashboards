@@ -80,6 +80,22 @@ def load_commtech_cohorts():
     with get_conn() as conn:
         return pd.read_sql(sql, conn)
 
+
+@st.cache_data(ttl=60)
+def load_notional_totals():
+    sql = """
+        SELECT
+            SUM(ABS(gross_notional)) AS gross_notional,
+            SUM(nmv) AS net_notional
+        FROM encoredb.positions_snapshot
+        WHERE snapshot_ts = (
+            SELECT MAX(snapshot_ts)
+            FROM encoredb.positions_snapshot
+        )
+    """
+    with get_conn() as conn:
+        return pd.read_sql(sql, conn)
+
 # -------------------------------------------------
 # PRICE CHANGE BUCKETS
 # -------------------------------------------------
@@ -104,6 +120,7 @@ def classify_move(x):
 # -------------------------------------------------
 latest = load_latest_snapshot()
 intraday = load_intraday_snapshots()
+notional_totals = load_notional_totals()
 
 if latest.empty:
     st.warning("No position data available yet.")
@@ -116,21 +133,30 @@ st.header("🕒 Latest Snapshot Overview")
 
 latest["move_bucket"] = latest["price_change_pct"].apply(classify_move)
 
-col1, col2, col3 = st.columns(3)
+gross_notional = notional_totals.loc[0, "gross_notional"]
+net_notional = notional_totals.loc[0, "net_notional"]
+
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     st.metric("Positions", len(latest))
 
 with col2:
     st.metric(
-        "Avg Price Move (%)",
-        round(latest["price_change_pct"].mean(), 2)
+        "Gross Notional (USD)",
+        f"${gross_notional/1e6:,.1f}m"
     )
 
 with col3:
     st.metric(
-        "Total NMV",
-        f"${latest['nmv'].sum():,.0f}"
+        "Net Notional (USD)",
+        f"${net_notional/1e6:,.1f}m"
+    )
+
+with col4:
+    st.metric(
+        "Avg Price Move (%)",
+        round(latest["price_change_pct"].mean(), 2)
     )
 
 bucket_summary = (
@@ -154,13 +180,13 @@ intraday_portfolio = (
     .agg(
         avg_move=("price_change_pct", "mean"),
         total_nmv=("nmv", "sum"),
-        positions=("ticker", "count"),
+        total_gross=("gross_notional", lambda x: x.abs().sum()),
     )
     .reset_index()
 )
 
 st.line_chart(
-    intraday_portfolio.set_index("snapshot_ts")[["avg_move"]],
+    intraday_portfolio.set_index("snapshot_ts")[["total_gross", "total_nmv"]],
     height=300
 )
 
@@ -236,6 +262,7 @@ st.dataframe(
             "egm_sector_v2",
             "quantity",
             "price_change_pct",
+            "gross_notional",
             "nmv",
             "move_bucket",
         ]
