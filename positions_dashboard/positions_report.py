@@ -12,8 +12,10 @@ st.set_page_config(
 
 st.title("📊 Encore – Positions Dashboard")
 
+from streamlit_autorefresh import st_autorefresh
+
 # Auto-refresh every 5 minutes
-st.autorefresh(interval=5 * 60 * 1000, key="positions_refresh")
+st_autorefresh(interval=5 * 60 * 1000, key="positions_refresh")
 
 # -------------------------------------------------
 # DATABASE CONNECTION
