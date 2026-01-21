@@ -12,6 +12,9 @@ st.set_page_config(
 
 st.title("📊 Encore – Positions Dashboard")
 
+# Auto-refresh every 5 minutes
+st.autorefresh(interval=5 * 60 * 1000, key="positions_refresh")
+
 # -------------------------------------------------
 # DATABASE CONNECTION
 # -------------------------------------------------
@@ -45,7 +48,8 @@ def load_commtech_cohorts():
         SELECT
             i.ticker,
             c.cohort_name,
-            w.weight_pct
+            w.weight_pct,
+            w.is_primary
         FROM encoredb.instrument_cohort_weights w
         JOIN encoredb.cohorts c ON w.cohort_id = c.cohort_id
         JOIN encoredb.instruments i ON w.instrument_id = i.instrument_id
@@ -105,22 +109,23 @@ def build_intraday_bucket_table(df):
             columns="time_label",
             values="names"
         )
+        .reindex(
+            [
+                "> 3% up",
+                "2–3% up",
+                "1–2% up",
+                "< 1% up",
+                "< 1% down",
+                "1–2% down",
+                "2–3% down",
+                "> 3% down",
+            ]
+        )
         .fillna(0)
         .astype(int)
     )
 
-    bucket_order = [
-        "> 3% up",
-        "2–3% up",
-        "1–2% up",
-        "< 1% up",
-        "< 1% down",
-        "1–2% down",
-        "2–3% down",
-        "> 3% down",
-    ]
-
-    return pivot.reindex(bucket_order)
+    return pivot
 
 # -------------------------------------------------
 # LOAD DATA
@@ -144,20 +149,20 @@ st.header("📌 Portfolio Price-Move Summary (Intraday)")
 bucket_table = build_intraday_bucket_table(intraday)
 
 st.caption(
-    "Counts represent number of names per price-move bucket at each 30-minute snapshot (CST). "
-    "Right-most column is the latest snapshot."
+    "Table shows the number of names in each price-move bucket at every 30-minute snapshot (CST). "
+    "Right-most column represents the latest snapshot."
 )
 
 st.dataframe(bucket_table, use_container_width=True)
 
 # -------------------------------------------------
-# DRILL-DOWN (LATEST SNAPSHOT)
+# DRILL-DOWN
 # -------------------------------------------------
 st.header("🔎 Drill-Down (Latest Snapshot)")
 
 selected_bucket = st.selectbox(
     "Select Price-Move Bucket",
-    bucket_table.index.dropna()
+    bucket_table.index
 )
 
 bucket_df = latest[latest["move_bucket"] == selected_bucket]
@@ -166,6 +171,11 @@ bucket_df = latest[latest["move_bucket"] == selected_bucket]
 # SECTOR VIEW
 # -------------------------------------------------
 st.subheader(f"🏭 Sector Breakdown – {selected_bucket}")
+
+st.caption(
+    "Average Move is an **unweighted average** of price_change_pct across names "
+    "(not weighted by position size or NMV)."
+)
 
 sector_view = (
     bucket_df
@@ -220,13 +230,14 @@ if selected_sector == "Comm/Tech":
         )
 
         final_df = ct_df[ct_df["cohort_name"] == selected_cohort]
+
 else:
     final_df = sector_df
 
 # -------------------------------------------------
 # FINAL INSTRUMENT VIEW
 # -------------------------------------------------
-st.subheader("📋 Instrument Detail (Latest Snapshot)")
+st.subheader("📋 Instrument Detail")
 
 st.dataframe(
     final_df[
@@ -237,6 +248,8 @@ st.dataframe(
             "quantity",
             "price_change_pct",
             "nmv",
+            "weight_pct",
+            "is_primary",
         ]
     ].sort_values("price_change_pct"),
     use_container_width=True
