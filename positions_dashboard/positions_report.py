@@ -158,18 +158,16 @@ with tab_sector:
         .shift(1)
     )
 
-    sector_values["pct_change"] = (
-        (sector_values["total_value"] - sector_values["prev_value"])
-        / sector_values["prev_value"]
-        * 100
-    )
+    # ---- compute pct change SAFELY (no divide-by-zero possible)
+    sector_values["pct_change"] = 0.0
 
-    # ---- clean infinities / NaNs
-    sector_values["pct_change"] = (
-        sector_values["pct_change"]
-        .replace([pd.NA, pd.NaT, float("inf"), float("-inf")], 0)
-        .fillna(0)
-        .astype(float)
+    mask = sector_values["prev_value"].notna() & (sector_values["prev_value"] != 0)
+
+    sector_values.loc[mask, "pct_change"] = (
+        (sector_values.loc[mask, "total_value"]
+        - sector_values.loc[mask, "prev_value"])
+        / sector_values.loc[mask, "prev_value"]
+        * 100
     )
 
     sector_values["move_bucket"] = sector_values["pct_change"].apply(classify_move)
