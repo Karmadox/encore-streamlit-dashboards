@@ -84,6 +84,45 @@ def classify_move(x):
         return "> 3% down"
 
 # -------------------------------------------------
+# INTRADAY BUCKET TABLE
+# -------------------------------------------------
+def build_intraday_bucket_table(df):
+    tmp = (
+        df.groupby(["snapshot_ts", "move_bucket"])
+        .agg(names=("ticker", "nunique"))
+        .reset_index()
+    )
+
+    tmp["time_label"] = (
+        pd.to_datetime(tmp["snapshot_ts"])
+        .dt.tz_convert("US/Central")
+        .dt.strftime("%H:%M")
+    )
+
+    pivot = (
+        tmp.pivot(
+            index="move_bucket",
+            columns="time_label",
+            values="names"
+        )
+        .fillna(0)
+        .astype(int)
+    )
+
+    bucket_order = [
+        "> 3% up",
+        "2–3% up",
+        "1–2% up",
+        "< 1% up",
+        "< 1% down",
+        "1–2% down",
+        "2–3% down",
+        "> 3% down",
+    ]
+
+    return pivot.reindex(bucket_order)
+
+# -------------------------------------------------
 # LOAD DATA
 # -------------------------------------------------
 intraday = load_intraday()
@@ -95,57 +134,30 @@ if intraday.empty:
 intraday["move_bucket"] = intraday["price_change_pct"].apply(classify_move)
 
 latest_ts = intraday["snapshot_ts"].max()
-prev_ts = (
-    intraday[intraday["snapshot_ts"] < latest_ts]["snapshot_ts"]
-    .max()
-)
-
 latest = intraday[intraday["snapshot_ts"] == latest_ts]
-previous = intraday[intraday["snapshot_ts"] == prev_ts]
 
 # -------------------------------------------------
-# PORTFOLIO SUMMARY TABLE
+# PORTFOLIO – INTRADAY SUMMARY
 # -------------------------------------------------
-st.header("📌 Portfolio Price-Move Summary (Latest vs Previous)")
+st.header("📌 Portfolio Price-Move Summary (Intraday)")
 
-def bucket_summary(df):
-    return (
-        df.groupby("move_bucket")
-        .agg(
-            names=("ticker", "nunique"),
-            net_nmv=("nmv", "sum"),
-        )
-        .reset_index()
-    )
+bucket_table = build_intraday_bucket_table(intraday)
 
-latest_sum = bucket_summary(latest).rename(
-    columns={"names": "names_now", "net_nmv": "nmv_now"}
-)
-prev_sum = bucket_summary(previous).rename(
-    columns={"names": "names_prev"}
+st.caption(
+    "Counts represent number of names per price-move bucket at each 30-minute snapshot (CST). "
+    "Right-most column is the latest snapshot."
 )
 
-summary = latest_sum.merge(
-    prev_sum,
-    on="move_bucket",
-    how="left"
-).fillna(0)
-
-summary["Δ names"] = summary["names_now"] - summary["names_prev"]
-
-st.dataframe(
-    summary.sort_values("move_bucket"),
-    use_container_width=True
-)
+st.dataframe(bucket_table, use_container_width=True)
 
 # -------------------------------------------------
-# BUCKET DRILL-DOWN
+# DRILL-DOWN (LATEST SNAPSHOT)
 # -------------------------------------------------
-st.header("🔎 Drill-Down")
+st.header("🔎 Drill-Down (Latest Snapshot)")
 
 selected_bucket = st.selectbox(
     "Select Price-Move Bucket",
-    summary["move_bucket"].sort_values().unique()
+    bucket_table.index.dropna()
 )
 
 bucket_df = latest[latest["move_bucket"] == selected_bucket]
@@ -193,8 +205,8 @@ if selected_sector == "Comm/Tech":
             .groupby("cohort_name")
             .agg(
                 names=("ticker", "nunique"),
-                weighted_move=("price_change_pct", "mean"),
                 net_nmv=("nmv", "sum"),
+                avg_move=("price_change_pct", "mean"),
             )
             .reset_index()
             .sort_values("net_nmv", ascending=False)
@@ -208,14 +220,13 @@ if selected_sector == "Comm/Tech":
         )
 
         final_df = ct_df[ct_df["cohort_name"] == selected_cohort]
-
 else:
     final_df = sector_df
 
 # -------------------------------------------------
 # FINAL INSTRUMENT VIEW
 # -------------------------------------------------
-st.subheader("📋 Instrument Detail")
+st.subheader("📋 Instrument Detail (Latest Snapshot)")
 
 st.dataframe(
     final_df[
