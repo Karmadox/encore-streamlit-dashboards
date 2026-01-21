@@ -71,6 +71,9 @@ def load_commtech_cohorts():
 # MOVE BUCKETS
 # -------------------------------------------------
 def classify_move(x):
+    if pd.isna(x):
+        return "Neutral"
+
     if x > 3:
         return "> 3% up"
     elif 2 < x <= 3:
@@ -79,6 +82,8 @@ def classify_move(x):
         return "1–2% up"
     elif 0 < x <= 1:
         return "< 1% up"
+    elif x == 0:
+        return "Neutral"
     elif -1 <= x < 0:
         return "< 1% down"
     elif -2 <= x < -1:
