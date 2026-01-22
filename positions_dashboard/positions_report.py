@@ -135,6 +135,9 @@ BUCKET_COLOR = {
 # -------------------------------------------------
 # HEATMAP RENDERER
 # -------------------------------------------------
+
+import streamlit.components.v1 as components
+
 def render_heatmap(df, title):
     st.subheader(title)
 
@@ -204,7 +207,7 @@ def render_heatmap(df, title):
 
     html += "</tbody></table></div>"
 
-    st.markdown(html, unsafe_allow_html=True)
+    components.html(html, height=420, scrolling=True)
 
 # -------------------------------------------------
 # LOAD & NORMALISE DATA
