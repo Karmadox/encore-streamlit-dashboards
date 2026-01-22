@@ -117,6 +117,16 @@ intraday["time_label"] = (
     .dt.strftime("%H:%M")
 )
 
+# ---- FIX: keep only today in CST
+cst_today = (
+    pd.Timestamp.now(tz="US/Central")
+    .normalize()
+)
+
+intraday = intraday[
+    intraday["snapshot_ts"].dt.tz_convert("US/Central") >= cst_today
+].copy()
+
 # -------------------------------------------------
 # NORMALISE ENFUSION PRICE CHANGE
 # Enfusion export gives fractional values (0.01 = 1%)
@@ -149,9 +159,6 @@ Sector performance is calculated using **intraday P&L normalised by exposure**:
 
 Sector Return (%) = Σ(daily_pnl) / Σ(|gross_notional|)
 
-• Uses realised intraday P&L  
-• Normalised by absolute exposure  
-• Robust when price / market value fields are unavailable  
 """
     )
 
