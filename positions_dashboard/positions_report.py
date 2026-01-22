@@ -58,7 +58,7 @@ def load_commtech_cohorts():
         return pd.read_sql(sql, conn)
 
 # -------------------------------------------------
-# MOVE BUCKETS
+# MOVE BUCKETS + SYMBOLS
 # -------------------------------------------------
 def classify_move(x):
     if pd.isna(x): return "< 1% up"
@@ -71,14 +71,17 @@ def classify_move(x):
     if -3 <= x < -2: return "2–3% down"
     return "> 3% down"
 
-BUCKET_ORDER = [
-    "> 3% up", "2–3% up", "1–2% up", "< 1% up",
-    "< 1% down", "1–2% down", "2–3% down", "> 3% down",
-]
+ARROW = {
+    "> 3% up": "▲",
+    "2–3% up": "▲",
+    "1–2% up": "▲",
+    "< 1% up": "▲",
+    "< 1% down": "▼",
+    "1–2% down": "▼",
+    "2–3% down": "▼",
+    "> 3% down": "▼",
+}
 
-# -------------------------------------------------
-# HEATMAP COLOURS + RENDERER
-# -------------------------------------------------
 BUCKET_COLOR = {
     "> 3% up": "#1a7f37",
     "2–3% up": "#4caf50",
@@ -90,33 +93,40 @@ BUCKET_COLOR = {
     "> 3% down": "#c62828",
 }
 
-def render_heatmap_table(df, title=None):
+# -------------------------------------------------
+# HEATMAP RENDERER (DARK MODE SAFE)
+# -------------------------------------------------
+def render_heatmap(df, title):
     if df.empty:
         st.info("No data available")
         return
 
-    html = "<table style='border-collapse: collapse; width:100%;'>"
-    html += "<tr><th style='text-align:left; padding:6px;'>Name</th>"
-    for col in df.columns:
-        html += f"<th style='padding:6px; text-align:center;'>{col}</th>"
+    st.subheader(title)
+
+    html = """
+    <div style="background-color:white; padding:8px; border-radius:6px;">
+    <table style="border-collapse:collapse; width:100%; font-size:14px;">
+    <tr>
+        <th style="text-align:left; padding:6px;">Name</th>
+    """
+
+    for c in df.columns:
+        html += f"<th style='padding:6px; text-align:center;'>{c}</th>"
     html += "</tr>"
 
     for idx, row in df.iterrows():
         html += f"<tr><td style='padding:6px; font-weight:600;'>{idx}</td>"
         for val in row:
-            color = BUCKET_COLOR.get(val, "#ffffff")
+            bg = BUCKET_COLOR.get(val, "#ffffff")
+            arrow = ARROW.get(val, "")
             html += (
                 "<td style='padding:6px; text-align:center; "
-                f"background-color:{color}; border:1px solid #ddd;'>"
-                f"{val}</td>"
+                f"background:{bg}; color:#000; border:1px solid #ddd;'>"
+                f"{arrow} {val}</td>"
             )
         html += "</tr>"
 
-    html += "</table>"
-
-    if title:
-        st.subheader(title)
-
+    html += "</table></div>"
     st.markdown(html, unsafe_allow_html=True)
 
 # -------------------------------------------------
@@ -136,7 +146,7 @@ intraday.loc[intraday["quantity"] < 0, "effective_price_change_pct"] *= -1
 intraday["move_bucket"] = intraday["effective_price_change_pct"].apply(classify_move)
 
 latest_ts = intraday["snapshot_ts"].max()
-latest = intraday[intraday["snapshot_ts"] == latest_ts].copy()
+latest = intraday[intraday["snapshot_ts"] == latest_ts]
 
 # -------------------------------------------------
 # TABS
@@ -148,12 +158,6 @@ tab_sector, tab_price = st.tabs(["🏭 Sector Driven", "📈 Price Change Driven
 # =================================================
 with tab_sector:
     st.header("🏭 Sector-Driven Intraday Performance")
-
-    st.markdown("""
-**Methodology**
-
-> **Sector / Cohort Return (%) = Σ Daily P&L ÷ Σ |Gross Notional|**
-""")
 
     sector_ret = (
         intraday
@@ -169,64 +173,10 @@ with tab_sector:
     sector_ret["bucket"] = sector_ret["ret_pct"].apply(classify_move)
 
     sector_matrix = sector_ret.pivot(
-        index="egm_sector_v2",
-        columns="time_label",
-        values="bucket"
+        index="egm_sector_v2", columns="time_label", values="bucket"
     ).sort_index()
 
-    render_heatmap_table(sector_matrix, "🏭 Sector Heatmap")
-
-    sel_sector = st.selectbox("🔎 Select Sector", sector_matrix.index)
-
-    if sel_sector != "Comm/Tech":
-        st.subheader("📋 Instrument Detail")
-        st.dataframe(
-            latest[latest["egm_sector_v2"] == sel_sector][
-                ["ticker", "description", "quantity",
-                 "effective_price_change_pct", "nmv"]
-            ].sort_values("effective_price_change_pct"),
-            width="stretch",
-        )
-    else:
-        cohorts = load_commtech_cohorts()
-        ct = intraday.merge(cohorts, on="ticker", how="inner")
-
-        cohort_ret = (
-            ct.groupby(["snapshot_ts", "time_label", "cohort_name"])
-            .agg(
-                pnl=("daily_pnl", "sum"),
-                gross=("gross_notional", lambda x: x.abs().sum()),
-            )
-            .reset_index()
-        )
-
-        cohort_ret["ret_pct"] = 100 * cohort_ret["pnl"] / cohort_ret["gross"].replace(0, pd.NA)
-        cohort_ret["bucket"] = cohort_ret["ret_pct"].apply(classify_move)
-
-        cohort_matrix = cohort_ret.pivot(
-            index="cohort_name",
-            columns="time_label",
-            values="bucket"
-        ).sort_index()
-
-        render_heatmap_table(cohort_matrix, "🧩 Comm/Tech Cohort Heatmap")
-
-        sel_cohort = st.selectbox("Select Cohort", cohort_matrix.index)
-
-        cohort_latest = (
-            latest.merge(cohorts, on="ticker", how="inner")
-            .query("cohort_name == @sel_cohort")
-        )
-
-        st.subheader(f"📋 Instrument Detail — {sel_cohort}")
-        st.dataframe(
-            cohort_latest[
-                ["ticker", "description", "quantity",
-                 "effective_price_change_pct", "nmv",
-                 "weight_pct", "is_primary"]
-            ].sort_values("effective_price_change_pct"),
-            width="stretch",
-        )
+    render_heatmap(sector_matrix, "🏭 Sector Heatmap")
 
 # =================================================
 # TAB 2 — PRICE CHANGE DRIVEN
@@ -240,59 +190,8 @@ with tab_price:
         .agg(names=("ticker", "nunique"))
         .reset_index()
         .pivot(index="move_bucket", columns="time_label", values="names")
-        .reindex(BUCKET_ORDER)
         .fillna(0)
         .astype(int)
     )
 
     st.dataframe(bucket_table, width="stretch")
-
-    sel_bucket = st.selectbox("Select Price-Move Bucket", BUCKET_ORDER)
-    bucket_df = latest[latest["move_bucket"] == sel_bucket]
-
-    sector_view = (
-        bucket_df.groupby("egm_sector_v2")
-        .agg(
-            names=("ticker", "nunique"),
-            net_nmv=("nmv", "sum"),
-            avg_move=("effective_price_change_pct", "mean"),
-        )
-        .reset_index()
-        .sort_values("net_nmv", ascending=False)
-    )
-
-    st.subheader(f"🏭 Sector Breakdown — {sel_bucket}")
-    st.dataframe(sector_view, width="stretch")
-
-    sel_sector = st.selectbox("Select Sector", sector_view["egm_sector_v2"])
-    sector_df = bucket_df[bucket_df["egm_sector_v2"] == sel_sector]
-
-    if sel_sector == "Comm/Tech":
-        cohorts = load_commtech_cohorts()
-        ct_df = sector_df.merge(cohorts, on="ticker", how="inner")
-
-        cohort_view = (
-            ct_df.groupby("cohort_name")
-            .agg(
-                names=("ticker", "nunique"),
-                net_nmv=("nmv", "sum"),
-                avg_move=("effective_price_change_pct", "mean"),
-            )
-            .reset_index()
-            .sort_values("net_nmv", ascending=False)
-        )
-
-        st.subheader("🧩 Comm/Tech — Cohort Breakdown")
-        st.dataframe(cohort_view, width="stretch")
-
-        sel_cohort = st.selectbox("Select Cohort", cohort_view["cohort_name"])
-        sector_df = ct_df[ct_df["cohort_name"] == sel_cohort]
-
-    st.subheader("📋 Instrument Detail")
-    st.dataframe(
-        sector_df[
-            ["ticker", "description", "quantity",
-             "effective_price_change_pct", "nmv"]
-        ].sort_values("effective_price_change_pct"),
-        width="stretch",
-    )
