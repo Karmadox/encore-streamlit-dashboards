@@ -121,15 +121,15 @@ BUCKET_SYMBOL = {
     "> 3% down": "▼▼▼▼",
 }
 
-BUCKET_COLOR = {
+BUCKET_TRIANGLE_COLOR = {
     "> 3% up": "#1a7f37",
-    "2–3% up": "#4caf50",
-    "1–2% up": "#8bc34a",
-    "< 1% up": "#c8e6c9",
-    "< 1% down": "#ffcdd2",
-    "1–2% down": "#f28b82",
-    "2–3% down": "#e57373",
-    "> 3% down": "#c62828",
+    "2–3% up": "#2e7d32",
+    "1–2% up": "#388e3c",
+    "< 1% up": "#4caf50",
+    "< 1% down": "#e53935",
+    "1–2% down": "#d32f2f",
+    "2–3% down": "#c62828",
+    "> 3% down": "#b71c1c",
 }
 
 # -------------------------------------------------
@@ -188,15 +188,16 @@ def render_heatmap(df, title):
 
         for val in row:
             symbol = BUCKET_SYMBOL.get(val, "")
-            color = BUCKET_COLOR.get(val, "#ffffff")
+            color = BUCKET_TRIANGLE_COLOR.get(val, "#000")
 
             html += f"""
             <td style="
                 padding:8px;
                 text-align:center;
-                font-weight:700;
-                color:#000;
-                background:{color};
+                font-weight:800;
+                font-size:15px;
+                color:{color};
+                background:#ffffff;
                 border:1px solid #ddd;
             ">
                 {symbol}
