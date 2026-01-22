@@ -165,6 +165,20 @@ intraday["time_label"] = (
     .dt.strftime("%H:%M")
 )
 
+# -------------------------------------------------
+# HARD FILTER: keep only rows that belong to the
+# selected date *in US/Central*
+# -------------------------------------------------
+intraday["snapshot_cst_date"] = (
+    intraday["snapshot_ts"]
+    .dt.tz_convert("US/Central")
+    .dt.date
+)
+
+intraday = intraday[
+    intraday["snapshot_cst_date"] == selected_date
+].copy()
+
 # Enfusion fixes
 intraday["price_change_pct"] *= 100
 intraday["effective_price_change_pct"] = intraday["price_change_pct"]
