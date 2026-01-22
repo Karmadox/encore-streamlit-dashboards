@@ -110,14 +110,23 @@ BUCKET_ORDER = [
     "< 1% down", "1–2% down", "2–3% down", "> 3% down",
 ]
 
-ARROW = {k: ("▲" if "up" in k else "▼") for k in BUCKET_ORDER}
+BUCKET_SYMBOL = {
+    "> 3% up": "▲▲▲▲",
+    "2–3% up": "▲▲▲",
+    "1–2% up": "▲▲",
+    "< 1% up": "▲",
+    "< 1% down": "▼",
+    "1–2% down": "▼▼",
+    "2–3% down": "▼▼▼",
+    "> 3% down": "▼▼▼▼",
+}
 
 BUCKET_COLOR = {
     "> 3% up": "#1a7f37",
     "2–3% up": "#4caf50",
     "1–2% up": "#8bc34a",
-    "< 1% up": "#e8f5e9",
-    "< 1% down": "#fdecea",
+    "< 1% up": "#c8e6c9",
+    "< 1% down": "#ffcdd2",
     "1–2% down": "#f28b82",
     "2–3% down": "#e57373",
     "> 3% down": "#c62828",
@@ -128,25 +137,73 @@ BUCKET_COLOR = {
 # -------------------------------------------------
 def render_heatmap(df, title):
     st.subheader(title)
-    html = "<div style='background:white; padding:8px; border-radius:6px;'>"
-    html += "<table style='border-collapse:collapse; width:100%;'>"
-    html += "<tr><th style='text-align:left;'>Name</th>"
+
+    html = """
+    <div style="background:white; padding:10px; border-radius:8px;">
+    <table style="border-collapse:collapse; width:100%; font-size:14px;">
+        <thead>
+            <tr>
+                <th style="
+                    text-align:left;
+                    padding:8px;
+                    background:#f5f5f5;
+                    color:#000;
+                    border:1px solid #ddd;
+                ">
+                    Name
+                </th>
+    """
+
     for c in df.columns:
-        html += f"<th style='text-align:center;'>{c}</th>"
-    html += "</tr>"
+        html += f"""
+            <th style="
+                text-align:center;
+                padding:8px;
+                background:#f5f5f5;
+                color:#000;
+                border:1px solid #ddd;
+            ">
+                {c}
+            </th>
+        """
+
+    html += "</tr></thead><tbody>"
 
     for idx, row in df.iterrows():
-        html += f"<tr><td style='font-weight:600;'>{idx}</td>"
+        html += f"""
+        <tr>
+            <td style="
+                padding:8px;
+                font-weight:600;
+                color:#000;
+                border:1px solid #ddd;
+                background:#ffffff;
+            ">
+                {idx}
+            </td>
+        """
+
         for val in row:
-            color = BUCKET_COLOR.get(val, "#fff")
-            arrow = ARROW.get(val, "")
-            html += (
-                f"<td style='background:{color}; text-align:center; "
-                f"border:1px solid #ddd; color:#000;'>"
-                f"{arrow} {val}</td>"
-            )
+            symbol = BUCKET_SYMBOL.get(val, "")
+            color = BUCKET_COLOR.get(val, "#ffffff")
+
+            html += f"""
+            <td style="
+                padding:8px;
+                text-align:center;
+                font-weight:700;
+                color:#000;
+                background:{color};
+                border:1px solid #ddd;
+            ">
+                {symbol}
+            </td>
+            """
+
         html += "</tr>"
-    html += "</table></div>"
+
+    html += "</tbody></table></div>"
+
     st.markdown(html, unsafe_allow_html=True)
 
 # -------------------------------------------------
