@@ -77,13 +77,55 @@ BUCKET_ORDER = [
 ]
 
 # -------------------------------------------------
+# HEATMAP COLOURS + RENDERER
+# -------------------------------------------------
+BUCKET_COLOR = {
+    "> 3% up": "#1a7f37",
+    "2–3% up": "#4caf50",
+    "1–2% up": "#8bc34a",
+    "< 1% up": "#e8f5e9",
+    "< 1% down": "#fdecea",
+    "1–2% down": "#f28b82",
+    "2–3% down": "#e57373",
+    "> 3% down": "#c62828",
+}
+
+def render_heatmap_table(df, title=None):
+    if df.empty:
+        st.info("No data available")
+        return
+
+    html = "<table style='border-collapse: collapse; width:100%;'>"
+    html += "<tr><th style='text-align:left; padding:6px;'>Name</th>"
+    for col in df.columns:
+        html += f"<th style='padding:6px; text-align:center;'>{col}</th>"
+    html += "</tr>"
+
+    for idx, row in df.iterrows():
+        html += f"<tr><td style='padding:6px; font-weight:600;'>{idx}</td>"
+        for val in row:
+            color = BUCKET_COLOR.get(val, "#ffffff")
+            html += (
+                "<td style='padding:6px; text-align:center; "
+                f"background-color:{color}; border:1px solid #ddd;'>"
+                f"{val}</td>"
+            )
+        html += "</tr>"
+
+    html += "</table>"
+
+    if title:
+        st.subheader(title)
+
+    st.markdown(html, unsafe_allow_html=True)
+
+# -------------------------------------------------
 # LOAD & NORMALISE DATA
 # -------------------------------------------------
 intraday = load_intraday()
 intraday["snapshot_ts"] = pd.to_datetime(intraday["snapshot_ts"])
 intraday["time_label"] = intraday["snapshot_ts"].dt.tz_convert("US/Central").dt.strftime("%H:%M")
 
-# Keep only today (CST)
 cst_today = pd.Timestamp.now(tz="US/Central").normalize()
 intraday = intraday[intraday["snapshot_ts"].dt.tz_convert("US/Central") >= cst_today]
 
@@ -95,12 +137,6 @@ intraday["move_bucket"] = intraday["effective_price_change_pct"].apply(classify_
 
 latest_ts = intraday["snapshot_ts"].max()
 latest = intraday[intraday["snapshot_ts"] == latest_ts].copy()
-
-# -------------------------------------------------
-# SESSION STATE
-# -------------------------------------------------
-for key in ["bucket", "sector", "cohort"]:
-    st.session_state.setdefault(key, None)
 
 # -------------------------------------------------
 # TABS
@@ -138,7 +174,7 @@ with tab_sector:
         values="bucket"
     ).sort_index()
 
-    st.dataframe(sector_matrix, width="stretch")
+    render_heatmap_table(sector_matrix, "🏭 Sector Heatmap")
 
     sel_sector = st.selectbox("🔎 Select Sector", sector_matrix.index)
 
@@ -146,7 +182,8 @@ with tab_sector:
         st.subheader("📋 Instrument Detail")
         st.dataframe(
             latest[latest["egm_sector_v2"] == sel_sector][
-                ["ticker", "description", "quantity", "effective_price_change_pct", "nmv"]
+                ["ticker", "description", "quantity",
+                 "effective_price_change_pct", "nmv"]
             ].sort_values("effective_price_change_pct"),
             width="stretch",
         )
@@ -172,8 +209,7 @@ with tab_sector:
             values="bucket"
         ).sort_index()
 
-        st.subheader("🧩 Comm/Tech — Cohort Driven")
-        st.dataframe(cohort_matrix, width="stretch")
+        render_heatmap_table(cohort_matrix, "🧩 Comm/Tech Cohort Heatmap")
 
         sel_cohort = st.selectbox("Select Cohort", cohort_matrix.index)
 
