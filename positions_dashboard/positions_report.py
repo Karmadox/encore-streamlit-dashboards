@@ -2,16 +2,13 @@ import streamlit as st
 import pandas as pd
 import psycopg2
 from streamlit_autorefresh import st_autorefresh
+from datetime import date
 
 # -------------------------------------------------
 # STREAMLIT CONFIG
 # -------------------------------------------------
 st.set_page_config(page_title="Encore Positions Dashboard", layout="wide")
 st.title("📊 Encore – Positions Dashboard")
-
-auto_refresh = st.checkbox("🔄 Auto-refresh every 5 minutes", value=True)
-if auto_refresh:
-    st_autorefresh(interval=5 * 60 * 1000, key="positions_refresh")
 
 # -------------------------------------------------
 # DATABASE CONNECTION
@@ -20,18 +17,55 @@ def get_conn():
     return psycopg2.connect(**st.secrets["db"])
 
 # -------------------------------------------------
+# DATE HANDLING
+# -------------------------------------------------
+@st.cache_data(ttl=300)
+def load_available_dates():
+    sql = """
+        SELECT DISTINCT snapshot_date
+        FROM encoredb.positions_snapshot
+        ORDER BY snapshot_date DESC
+    """
+    with get_conn() as conn:
+        df = pd.read_sql(sql, conn)
+    return df["snapshot_date"].tolist()
+
+available_dates = load_available_dates()
+
+if not available_dates:
+    st.error("No snapshot data available.")
+    st.stop()
+
+selected_date = st.selectbox(
+    "📅 Select snapshot date",
+    available_dates,
+    index=0,  # latest date by default
+)
+
+is_today = selected_date == date.today()
+
+auto_refresh = st.checkbox(
+    "🔄 Auto-refresh every 5 minutes",
+    value=is_today,
+    disabled=not is_today,
+)
+
+if auto_refresh and is_today:
+    st_autorefresh(interval=5 * 60 * 1000, key="positions_refresh")
+
+# -------------------------------------------------
 # DATA LOADERS
 # -------------------------------------------------
 @st.cache_data(ttl=60)
-def load_intraday():
+def load_intraday(snapshot_date):
     sql = """
         SELECT *
         FROM encoredb.positions_snapshot
-        WHERE snapshot_date = CURRENT_DATE
+        WHERE snapshot_date = %s
         ORDER BY snapshot_ts
     """
     with get_conn() as conn:
-        return pd.read_sql(sql, conn)
+        return pd.read_sql(sql, conn, params=(snapshot_date,))
 
 @st.cache_data(ttl=300)
 def load_commtech_cohorts():
@@ -51,11 +85,11 @@ def load_commtech_cohorts():
               FROM encoredb.instrument_cohort_weights w2
               WHERE w2.instrument_id = w.instrument_id
                 AND w2.cohort_id = w.cohort_id
-                AND w2.effective_date <= CURRENT_DATE
+                AND w2.effective_date <= %s
           )
     """
     with get_conn() as conn:
-        return pd.read_sql(sql, conn)
+        return pd.read_sql(sql, conn, params=(selected_date,))
 
 # -------------------------------------------------
 # MOVE BUCKETS
@@ -118,13 +152,20 @@ def render_heatmap(df, title):
 # -------------------------------------------------
 # LOAD & NORMALISE DATA
 # -------------------------------------------------
-intraday = load_intraday()
+intraday = load_intraday(selected_date)
+
+if intraday.empty:
+    st.warning("No data available for selected date.")
+    st.stop()
+
 intraday["snapshot_ts"] = pd.to_datetime(intraday["snapshot_ts"])
-intraday["time_label"] = intraday["snapshot_ts"].dt.tz_convert("US/Central").dt.strftime("%H:%M")
+intraday["time_label"] = (
+    intraday["snapshot_ts"]
+    .dt.tz_convert("US/Central")
+    .dt.strftime("%H:%M")
+)
 
-cst_today = pd.Timestamp.now(tz="US/Central").normalize()
-intraday = intraday[intraday["snapshot_ts"].dt.tz_convert("US/Central") >= cst_today]
-
+# Enfusion fixes
 intraday["price_change_pct"] *= 100
 intraday["effective_price_change_pct"] = intraday["price_change_pct"]
 intraday.loc[intraday["quantity"] < 0, "effective_price_change_pct"] *= -1
@@ -145,15 +186,22 @@ with tab_sector:
 
     sector_ret = (
         intraday.groupby(["snapshot_ts", "time_label", "egm_sector_v2"])
-        .agg(pnl=("daily_pnl", "sum"),
-             gross=("gross_notional", lambda x: x.abs().sum()))
+        .agg(
+            pnl=("daily_pnl", "sum"),
+            gross=("gross_notional", lambda x: x.abs().sum()),
+        )
         .reset_index()
     )
-    sector_ret["ret_pct"] = 100 * sector_ret["pnl"] / sector_ret["gross"].replace(0, pd.NA)
+
+    sector_ret["ret_pct"] = (
+        100 * sector_ret["pnl"] / sector_ret["gross"].replace(0, pd.NA)
+    )
     sector_ret["bucket"] = sector_ret["ret_pct"].apply(classify_move)
 
     sector_matrix = sector_ret.pivot(
-        index="egm_sector_v2", columns="time_label", values="bucket"
+        index="egm_sector_v2",
+        columns="time_label",
+        values="bucket"
     ).sort_index()
 
     render_heatmap(sector_matrix, "🏭 Sector Heatmap")
@@ -175,21 +223,30 @@ with tab_sector:
 
         cohort_ret = (
             ct.groupby(["snapshot_ts", "time_label", "cohort_name"])
-            .agg(pnl=("daily_pnl", "sum"),
-                 gross=("gross_notional", lambda x: x.abs().sum()))
+            .agg(
+                pnl=("daily_pnl", "sum"),
+                gross=("gross_notional", lambda x: x.abs().sum()),
+            )
             .reset_index()
         )
-        cohort_ret["ret_pct"] = 100 * cohort_ret["pnl"] / cohort_ret["gross"].replace(0, pd.NA)
+
+        cohort_ret["ret_pct"] = (
+            100 * cohort_ret["pnl"] / cohort_ret["gross"].replace(0, pd.NA)
+        )
         cohort_ret["bucket"] = cohort_ret["ret_pct"].apply(classify_move)
 
         cohort_matrix = cohort_ret.pivot(
-            index="cohort_name", columns="time_label", values="bucket"
+            index="cohort_name",
+            columns="time_label",
+            values="bucket"
         ).sort_index()
 
         render_heatmap(cohort_matrix, "🧩 Comm/Tech Cohort Heatmap")
 
         sel_cohort = st.selectbox("Select Cohort", cohort_matrix.index)
-        cohort_latest = latest.merge(cohorts, on="ticker").query("cohort_name == @sel_cohort")
+        cohort_latest = latest.merge(cohorts, on="ticker").query(
+            "cohort_name == @sel_cohort"
+        )
 
         st.subheader(f"📋 Instrument Detail — {sel_cohort}")
         st.dataframe(
@@ -223,12 +280,15 @@ with tab_price:
 
     sector_view = (
         bucket_df.groupby("egm_sector_v2")
-        .agg(names=("ticker", "nunique"),
-             net_nmv=("nmv", "sum"),
-             avg_move=("effective_price_change_pct", "mean"))
+        .agg(
+            names=("ticker", "nunique"),
+            net_nmv=("nmv", "sum"),
+            avg_move=("effective_price_change_pct", "mean"),
+        )
         .reset_index()
         .sort_values("net_nmv", ascending=False)
     )
+
     st.subheader(f"🏭 Sector Breakdown — {sel_bucket}")
     st.dataframe(sector_view, width="stretch")
 
@@ -241,12 +301,15 @@ with tab_price:
 
         cohort_view = (
             ct_df.groupby("cohort_name")
-            .agg(names=("ticker", "nunique"),
-                 net_nmv=("nmv", "sum"),
-                 avg_move=("effective_price_change_pct", "mean"))
+            .agg(
+                names=("ticker", "nunique"),
+                net_nmv=("nmv", "sum"),
+                avg_move=("effective_price_change_pct", "mean"),
+            )
             .reset_index()
             .sort_values("net_nmv", ascending=False)
         )
+
         st.subheader("🧩 Comm/Tech — Cohort Breakdown")
         st.dataframe(cohort_view, width="stretch")
 
