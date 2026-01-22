@@ -8,7 +8,11 @@ from streamlit_autorefresh import st_autorefresh
 # -------------------------------------------------
 st.set_page_config(page_title="Encore Positions Dashboard", layout="wide")
 st.title("📊 Encore – Positions Dashboard")
-st_autorefresh(interval=5 * 60 * 1000, key="positions_refresh")
+
+# ---------------- Auto-refresh control ----------------
+auto_refresh = st.checkbox("🔄 Auto-refresh every 5 minutes", value=True)
+if auto_refresh:
+    st_autorefresh(interval=5 * 60 * 1000, key="positions_refresh")
 
 # -------------------------------------------------
 # DATABASE CONNECTION
@@ -55,11 +59,10 @@ def load_commtech_cohorts():
         return pd.read_sql(sql, conn)
 
 # -------------------------------------------------
-# MOVE BUCKETS (NO NEUTRAL)
+# MOVE BUCKETS
 # -------------------------------------------------
 def classify_move(x):
-    if pd.isna(x):
-        return "< 1% up"
+    if pd.isna(x): return "< 1% up"
     if x > 3: return "> 3% up"
     if 2 < x <= 3: return "2–3% up"
     if 1 < x <= 2: return "1–2% up"
@@ -74,6 +77,25 @@ BUCKET_ORDER = [
     "< 1% down", "1–2% down", "2–3% down", "> 3% down",
 ]
 
+BUCKET_SCORE = {
+    "> 3% up": 4,
+    "2–3% up": 3,
+    "1–2% up": 2,
+    "< 1% up": 1,
+    "< 1% down": -1,
+    "1–2% down": -2,
+    "2–3% down": -3,
+    "> 3% down": -4,
+}
+
+def heatmap(df):
+    numeric = df.replace(BUCKET_SCORE)
+    return (
+        df.style
+        .background_gradient(cmap="RdYlGn", axis=None, gmap=numeric)
+        .set_properties(**{"text-align": "center"})
+    )
+
 # -------------------------------------------------
 # LOAD & NORMALISE DATA
 # -------------------------------------------------
@@ -81,26 +103,23 @@ intraday = load_intraday()
 intraday["snapshot_ts"] = pd.to_datetime(intraday["snapshot_ts"])
 intraday["time_label"] = intraday["snapshot_ts"].dt.tz_convert("US/Central").dt.strftime("%H:%M")
 
-# Keep only today (CST)
 cst_today = pd.Timestamp.now(tz="US/Central").normalize()
 intraday = intraday[intraday["snapshot_ts"].dt.tz_convert("US/Central") >= cst_today]
 
-# -------------------------------------------------
-# ENFUSION FIXES
-# -------------------------------------------------
-
-# 1) Convert fractional Enfusion values to %
-intraday["price_change_pct"] = intraday["price_change_pct"] * 100
-
-# 2) DIRECTION-AWARE PRICE CHANGE (SHORTS FLIPPED)
+# Enfusion fixes
+intraday["price_change_pct"] *= 100
 intraday["effective_price_change_pct"] = intraday["price_change_pct"]
 intraday.loc[intraday["quantity"] < 0, "effective_price_change_pct"] *= -1
-
-# 3) Buckets based on EFFECTIVE move
 intraday["move_bucket"] = intraday["effective_price_change_pct"].apply(classify_move)
 
 latest_ts = intraday["snapshot_ts"].max()
 latest = intraday[intraday["snapshot_ts"] == latest_ts].copy()
+
+# -------------------------------------------------
+# SESSION STATE DEFAULTS
+# -------------------------------------------------
+for key in ["bucket", "sector", "cohort"]:
+    st.session_state.setdefault(key, None)
 
 # -------------------------------------------------
 # TABS
@@ -108,7 +127,7 @@ latest = intraday[intraday["snapshot_ts"] == latest_ts].copy()
 tab_sector, tab_price = st.tabs(["🏭 Sector Driven", "📈 Price Change Driven"])
 
 # =================================================
-# TAB 1 — SECTOR DRIVEN (UNCHANGED, CORRECT)
+# TAB 1 — SECTOR DRIVEN
 # =================================================
 with tab_sector:
     st.header("🏭 Sector-Driven Intraday Performance")
@@ -116,11 +135,9 @@ with tab_sector:
     st.markdown("""
 **Methodology**
 
-Sector & cohort returns are calculated as:
+> **Sector / Cohort Return (%) = Σ Daily P&L ÷ Σ |Gross Notional|**
 
-> **Σ Daily P&L ÷ Σ |Gross Notional|**
-
-This naturally handles long and short positions.
+This correctly accounts for both long and short positions.
 """)
 
     sector_ret = (
@@ -140,19 +157,22 @@ This naturally handles long and short positions.
         index="egm_sector_v2", columns="time_label", values="bucket"
     ).sort_index()
 
-    st.dataframe(sector_matrix, width="stretch")
+    st.dataframe(heatmap(sector_matrix), width="stretch")
 
-    st.subheader("🔎 Sector Drill-Down (Latest Snapshot)")
-    sel_sector = st.selectbox("Select Sector", sector_matrix.index)
+    sel_sector = st.selectbox(
+        "🔎 Select Sector",
+        sector_matrix.index,
+        key="sector"
+    )
 
     if sel_sector != "Comm/Tech":
+        st.subheader("📋 Instrument Detail")
         st.dataframe(
             latest[latest["egm_sector_v2"] == sel_sector][
                 ["ticker", "description", "quantity", "effective_price_change_pct", "nmv"]
             ].sort_values("effective_price_change_pct"),
             width="stretch",
         )
-
     else:
         cohorts = load_commtech_cohorts()
         ct = intraday.merge(cohorts, on="ticker", how="inner")
@@ -173,10 +193,14 @@ This naturally handles long and short positions.
             index="cohort_name", columns="time_label", values="bucket"
         ).sort_index()
 
-        st.subheader("🧩 Comm/Tech — Cohort-Driven View")
-        st.dataframe(cohort_matrix, width="stretch")
+        st.subheader("🧩 Comm/Tech — Cohort Driven")
+        st.dataframe(heatmap(cohort_matrix), width="stretch")
 
-        sel_cohort = st.selectbox("Select Cohort", cohort_matrix.index)
+        sel_cohort = st.selectbox(
+            "Select Cohort",
+            cohort_matrix.index,
+            key="cohort"
+        )
 
         cohort_latest = (
             latest.merge(cohorts, on="ticker", how="inner")
@@ -192,7 +216,7 @@ This naturally handles long and short positions.
         )
 
 # =================================================
-# TAB 2 — PRICE CHANGE DRIVEN (FIXED FOR SHORTS)
+# TAB 2 — PRICE CHANGE DRIVEN
 # =================================================
 with tab_price:
     st.header("📈 Price Change–Driven Analysis")
@@ -210,7 +234,12 @@ with tab_price:
 
     st.dataframe(bucket_table, width="stretch")
 
-    sel_bucket = st.selectbox("Select Price-Move Bucket", BUCKET_ORDER)
+    sel_bucket = st.selectbox(
+        "Select Price-Move Bucket",
+        BUCKET_ORDER,
+        key="bucket"
+    )
+
     bucket_df = latest[latest["move_bucket"] == sel_bucket]
 
     sector_view = (
@@ -227,7 +256,12 @@ with tab_price:
     st.subheader(f"🏭 Sector Breakdown — {sel_bucket}")
     st.dataframe(sector_view, width="stretch")
 
-    sel_sector = st.selectbox("Select Sector", sector_view["egm_sector_v2"])
+    sel_sector = st.selectbox(
+        "Select Sector",
+        sector_view["egm_sector_v2"],
+        key="sector_price"
+    )
+
     sector_df = bucket_df[bucket_df["egm_sector_v2"] == sel_sector]
 
     if sel_sector == "Comm/Tech":
@@ -248,7 +282,12 @@ with tab_price:
         st.subheader("🧩 Comm/Tech — Cohort Breakdown")
         st.dataframe(cohort_view, width="stretch")
 
-        sel_cohort = st.selectbox("Select Cohort", cohort_view["cohort_name"])
+        sel_cohort = st.selectbox(
+            "Select Cohort",
+            cohort_view["cohort_name"],
+            key="cohort_price"
+        )
+
         sector_df = ct_df[ct_df["cohort_name"] == sel_cohort]
 
     st.subheader("📋 Instrument Detail")
