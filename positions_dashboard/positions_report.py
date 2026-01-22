@@ -55,7 +55,7 @@ def load_commtech_cohorts():
         return pd.read_sql(sql, conn)
 
 # -------------------------------------------------
-# MOVE BUCKETS
+# MOVE BUCKETS (NO NEUTRAL)
 # -------------------------------------------------
 def classify_move(x):
     if pd.isna(x):
@@ -81,13 +81,23 @@ intraday = load_intraday()
 intraday["snapshot_ts"] = pd.to_datetime(intraday["snapshot_ts"])
 intraday["time_label"] = intraday["snapshot_ts"].dt.tz_convert("US/Central").dt.strftime("%H:%M")
 
-# Today only (CST)
+# Keep only today (CST)
 cst_today = pd.Timestamp.now(tz="US/Central").normalize()
 intraday = intraday[intraday["snapshot_ts"].dt.tz_convert("US/Central") >= cst_today]
 
-# Enfusion % fix
-intraday["price_change_pct"] *= 100
-intraday["move_bucket"] = intraday["price_change_pct"].apply(classify_move)
+# -------------------------------------------------
+# ENFUSION FIXES
+# -------------------------------------------------
+
+# 1) Convert fractional Enfusion values to %
+intraday["price_change_pct"] = intraday["price_change_pct"] * 100
+
+# 2) DIRECTION-AWARE PRICE CHANGE (SHORTS FLIPPED)
+intraday["effective_price_change_pct"] = intraday["price_change_pct"]
+intraday.loc[intraday["quantity"] < 0, "effective_price_change_pct"] *= -1
+
+# 3) Buckets based on EFFECTIVE move
+intraday["move_bucket"] = intraday["effective_price_change_pct"].apply(classify_move)
 
 latest_ts = intraday["snapshot_ts"].max()
 latest = intraday[intraday["snapshot_ts"] == latest_ts].copy()
@@ -98,7 +108,7 @@ latest = intraday[intraday["snapshot_ts"] == latest_ts].copy()
 tab_sector, tab_price = st.tabs(["🏭 Sector Driven", "📈 Price Change Driven"])
 
 # =================================================
-# SECTOR DRIVEN TAB
+# TAB 1 — SECTOR DRIVEN (UNCHANGED, CORRECT)
 # =================================================
 with tab_sector:
     st.header("🏭 Sector-Driven Intraday Performance")
@@ -109,9 +119,10 @@ with tab_sector:
 Sector & cohort returns are calculated as:
 
 > **Σ Daily P&L ÷ Σ |Gross Notional|**
+
+This naturally handles long and short positions.
 """)
 
-    # ---------- SECTOR MATRIX ----------
     sector_ret = (
         intraday
         .groupby(["snapshot_ts", "time_label", "egm_sector_v2"])
@@ -131,20 +142,18 @@ Sector & cohort returns are calculated as:
 
     st.dataframe(sector_matrix, width="stretch")
 
-    # ---------- SECTOR DRILL ----------
     st.subheader("🔎 Sector Drill-Down (Latest Snapshot)")
     sel_sector = st.selectbox("Select Sector", sector_matrix.index)
 
     if sel_sector != "Comm/Tech":
         st.dataframe(
             latest[latest["egm_sector_v2"] == sel_sector][
-                ["ticker", "description", "quantity", "price_change_pct", "nmv"]
-            ].sort_values("price_change_pct"),
+                ["ticker", "description", "quantity", "effective_price_change_pct", "nmv"]
+            ].sort_values("effective_price_change_pct"),
             width="stretch",
         )
 
     else:
-        # ---------- COHORT MATRIX ----------
         cohorts = load_commtech_cohorts()
         ct = intraday.merge(cohorts, on="ticker", how="inner")
 
@@ -177,13 +186,13 @@ Sector & cohort returns are calculated as:
         st.subheader(f"📋 Instrument Detail — {sel_cohort}")
         st.dataframe(
             cohort_latest[
-                ["ticker", "description", "quantity", "price_change_pct", "nmv", "weight_pct", "is_primary"]
-            ].sort_values("price_change_pct"),
+                ["ticker", "description", "quantity", "effective_price_change_pct", "nmv", "weight_pct", "is_primary"]
+            ].sort_values("effective_price_change_pct"),
             width="stretch",
         )
 
 # =================================================
-# PRICE CHANGE DRIVEN TAB (RESTORED)
+# TAB 2 — PRICE CHANGE DRIVEN (FIXED FOR SHORTS)
 # =================================================
 with tab_price:
     st.header("📈 Price Change–Driven Analysis")
@@ -206,7 +215,11 @@ with tab_price:
 
     sector_view = (
         bucket_df.groupby("egm_sector_v2")
-        .agg(names=("ticker", "nunique"), net_nmv=("nmv", "sum"))
+        .agg(
+            names=("ticker", "nunique"),
+            net_nmv=("nmv", "sum"),
+            avg_move=("effective_price_change_pct", "mean"),
+        )
         .reset_index()
         .sort_values("net_nmv", ascending=False)
     )
@@ -215,7 +228,6 @@ with tab_price:
     st.dataframe(sector_view, width="stretch")
 
     sel_sector = st.selectbox("Select Sector", sector_view["egm_sector_v2"])
-
     sector_df = bucket_df[bucket_df["egm_sector_v2"] == sel_sector]
 
     if sel_sector == "Comm/Tech":
@@ -224,7 +236,11 @@ with tab_price:
 
         cohort_view = (
             ct_df.groupby("cohort_name")
-            .agg(names=("ticker", "nunique"), net_nmv=("nmv", "sum"))
+            .agg(
+                names=("ticker", "nunique"),
+                net_nmv=("nmv", "sum"),
+                avg_move=("effective_price_change_pct", "mean"),
+            )
             .reset_index()
             .sort_values("net_nmv", ascending=False)
         )
@@ -238,7 +254,7 @@ with tab_price:
     st.subheader("📋 Instrument Detail")
     st.dataframe(
         sector_df[
-            ["ticker", "description", "quantity", "price_change_pct", "nmv"]
-        ].sort_values("price_change_pct"),
+            ["ticker", "description", "quantity", "effective_price_change_pct", "nmv"]
+        ].sort_values("effective_price_change_pct"),
         width="stretch",
     )
