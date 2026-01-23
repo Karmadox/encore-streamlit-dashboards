@@ -1,5 +1,7 @@
 import streamlit as st
 from pathlib import Path
+import streamlit.components.v1 as components
+from pathlib import Path
 
 # -------------------------------------------------
 # PAGE CONFIG
@@ -73,28 +75,46 @@ st.markdown(
 )
 
 # -------------------------------------------------
-# HEADER / BRAND (SVG SAFE)
+# HEADER / BRAND (SVG SAFE — FIXED)
 # -------------------------------------------------
 svg_path = Path(__file__).parent / "assets" / "Logomark.svg"
 svg_code = svg_path.read_text()
 
-st.markdown(
-    f"""
-    <div style="display:flex; align-items:center; gap:22px; margin-bottom:18px;">
-        <div style="width:140px;">
-            {svg_code}
-        </div>
-        <div>
-            <h2 style="margin:0;">Encore Analytics Dashboards</h2>
-            <p class="encore-muted" style="margin-top:6px;">
-                A unified entry point for Encore’s internal analytics dashboards, providing
-                real-time insight into portfolio positions, market conditions, and trading performance.
-            </p>
-        </div>
+header_html = f"""
+<div style="
+    display:flex;
+    align-items:center;
+    gap:24px;
+    padding:8px 4px 16px 4px;
+">
+    <div style="width:140px; flex-shrink:0;">
+        {svg_code}
     </div>
-    """,
-    unsafe_allow_html=True,
-)
+
+    <div>
+        <h2 style="
+            margin:0;
+            font-size:1.9rem;
+            font-weight:700;
+            color:#1a7f37;
+        ">
+            Encore Analytics Dashboards
+        </h2>
+
+        <p style="
+            margin-top:6px;
+            font-size:0.95rem;
+            color:#6b7280;
+            max-width:720px;
+        ">
+            A unified entry point for Encore’s internal analytics dashboards, providing
+            real-time insight into portfolio positions, market conditions, and trading performance.
+        </p>
+    </div>
+</div>
+"""
+
+components.html(header_html, height=160)
 
 st.divider()
 
