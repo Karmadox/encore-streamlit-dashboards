@@ -1,4 +1,5 @@
 import streamlit as st
+from pathlib import Path
 
 # -------------------------------------------------
 # PAGE CONFIG
@@ -72,18 +73,25 @@ st.markdown(
 )
 
 # -------------------------------------------------
-# HEADER / BRAND
+# HEADER / BRAND (SVG SAFE)
 # -------------------------------------------------
-st.image("/mnt/data/Logomark.jpeg", width=160)
+svg_path = Path(__file__).parent / "assets" / "Logomark.svg"
+svg_code = svg_path.read_text()
 
 st.markdown(
-    """
-    ## Encore Analytics Dashboards
-
-    <p class="encore-muted">
-    A unified entry point for Encore’s internal analytics dashboards, providing
-    real-time insight into portfolio positions, market conditions, and trading performance.
-    </p>
+    f"""
+    <div style="display:flex; align-items:center; gap:22px; margin-bottom:18px;">
+        <div style="width:140px;">
+            {svg_code}
+        </div>
+        <div>
+            <h2 style="margin:0;">Encore Analytics Dashboards</h2>
+            <p class="encore-muted" style="margin-top:6px;">
+                A unified entry point for Encore’s internal analytics dashboards, providing
+                real-time insight into portfolio positions, market conditions, and trading performance.
+            </p>
+        </div>
+    </div>
     """,
     unsafe_allow_html=True,
 )
