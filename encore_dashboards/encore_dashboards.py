@@ -9,39 +9,62 @@ st.set_page_config(
 )
 
 # -------------------------------------------------
-# BASIC BRAND STYLING (SAFE FOR STREAMLIT CLOUD)
+# ENCORE BRAND STYLING (STREAMLIT-SAFE)
 # -------------------------------------------------
 st.markdown(
     """
     <style>
-        .dashboard-card {
-            border: 1px solid #e6e6e6;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 20px;
-            background-color: #ffffff;
+        :root {
+            --encore-green: #1a7f37;
+            --encore-green-light: #4caf50;
+            --encore-grey: #6b7280;
+            --encore-border: #e5e7eb;
         }
+
+        .dashboard-card {
+            border: 1px solid var(--encore-border);
+            border-radius: 14px;
+            padding: 22px;
+            margin-bottom: 22px;
+            background-color: #ffffff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+
         .dashboard-title {
-            font-size: 1.3rem;
+            font-size: 1.35rem;
             font-weight: 700;
+            color: var(--encore-green);
             margin-bottom: 6px;
         }
+
         .dashboard-subtitle {
             font-size: 0.95rem;
-            color: #555555;
-            margin-bottom: 12px;
+            color: var(--encore-grey);
+            margin-bottom: 14px;
         }
+
         .dashboard-list {
-            margin-left: 16px;
-            color: #333333;
+            margin-left: 18px;
+            color: #111827;
+            font-size: 0.95rem;
         }
+
         .dashboard-link a {
+            display: inline-block;
+            margin-top: 10px;
             font-weight: 600;
             text-decoration: none;
-            color: #0f4c81;
+            color: var(--encore-green);
         }
+
         .dashboard-link a:hover {
+            color: var(--encore-green-light);
             text-decoration: underline;
+        }
+
+        .encore-muted {
+            color: var(--encore-grey);
+            font-size: 0.9rem;
         }
     </style>
     """,
@@ -49,14 +72,20 @@ st.markdown(
 )
 
 # -------------------------------------------------
-# HEADER
+# HEADER / BRAND
 # -------------------------------------------------
-st.markdown("## 📊 Encore Analytics Dashboards")
+st.image("/mnt/data/Logomark.jpeg", width=160)
+
 st.markdown(
     """
+    ## Encore Analytics Dashboards
+
+    <p class="encore-muted">
     A unified entry point for Encore’s internal analytics dashboards, providing
     real-time insight into portfolio positions, market conditions, and trading performance.
-    """
+    </p>
+    """,
+    unsafe_allow_html=True,
 )
 
 st.divider()
@@ -114,12 +143,15 @@ with col2:
     )
 
 # -------------------------------------------------
-# SECOND ROW (TRP / WIP)
+# SECOND ROW — TRP
 # -------------------------------------------------
 st.markdown(
     """
     <div class="dashboard-card">
-        <div class="dashboard-title">📉 TRP Dashboard <span style="font-size:0.9rem; color:#999;">(Work in Progress)</span></div>
+        <div class="dashboard-title">
+            📉 TRP Dashboard
+            <span style="font-size:0.9rem; color:#9ca3af;">(Work in Progress)</span>
+        </div>
         <div class="dashboard-subtitle">
             Trading-related performance, execution quality, and risk analytics.
         </div>
