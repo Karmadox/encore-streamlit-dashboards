@@ -471,6 +471,12 @@ with tab_daily:
 
     history["snapshot_ts"] = pd.to_datetime(history["snapshot_ts"])
 
+    history["cst_date"] = (
+        history["snapshot_ts"]
+        .dt.tz_convert("US/Central")
+        .dt.date
+    )
+
     # ---- SECTOR DAILY RETURNS
     sector_daily = compute_daily_returns(history, "egm_sector_v2")
 
@@ -532,13 +538,15 @@ with tab_daily:
 
         latest_day = cohort_daily["cst_date"].max()
 
-        cohort_latest = (
-            ct[
-                (ct["cohort_name"] == sel_cohort)
-                & (ct["snapshot_ts"]
-                   == ct[ct["cst_date"] == latest_day]["snapshot_ts"].max())
-            ]
+        latest_ts = (
+            ct.loc[ct["cst_date"] == latest_day, "snapshot_ts"]
+            .max()
         )
+
+        cohort_latest = ct[
+            (ct["cohort_name"] == sel_cohort)
+            & (ct["snapshot_ts"] == latest_ts)
+        ]
 
         st.subheader(f"📋 Instrument Detail — {sel_cohort}")
 
