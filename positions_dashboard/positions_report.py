@@ -91,6 +91,17 @@ def load_commtech_cohorts():
     with get_conn() as conn:
         return pd.read_sql(sql, conn, params=(selected_date,))
 
+@st.cache_data(ttl=600)
+def load_intraday_history():
+    sql = """
+        SELECT *
+        FROM encoredb.positions_snapshot
+        WHERE EXTRACT(ISODOW FROM snapshot_date) BETWEEN 1 AND 5
+        ORDER BY snapshot_date, snapshot_ts
+    """
+    with get_conn() as conn:
+        return pd.read_sql(sql, conn)
+
 # -------------------------------------------------
 # MOVE BUCKETS
 # -------------------------------------------------
@@ -131,6 +142,59 @@ BUCKET_TRIANGLE_COLOR = {
     "2–3% down": "#c62828",
     "> 3% down": "#b71c1c",
 }
+
+def compute_daily_returns(df, group_col):
+    """
+    Computes start-to-end-of-day return per group (sector or cohort).
+    """
+
+    # Ensure CST date
+    df = df.copy()
+    df["cst_date"] = df["snapshot_ts"].dt.tz_convert("US/Central").dt.date
+
+    # Identify start/end snapshots per day
+    bounds = (
+        df.groupby("cst_date")["snapshot_ts"]
+        .agg(start_ts="min", end_ts="max")
+        .reset_index()
+    )
+
+    df = df.merge(bounds, on="cst_date", how="inner")
+
+    start_df = df[df["snapshot_ts"] == df["start_ts"]]
+    end_df   = df[df["snapshot_ts"] == df["end_ts"]]
+
+    agg = lambda x: x.abs().sum()
+
+    start_agg = (
+        start_df.groupby(["cst_date", group_col])
+        .agg(start_pnl=("daily_pnl", "sum"),
+             start_gross=("gross_notional", agg))
+        .reset_index()
+    )
+
+    end_agg = (
+        end_df.groupby(["cst_date", group_col])
+        .agg(end_pnl=("daily_pnl", "sum"),
+             end_gross=("gross_notional", agg))
+        .reset_index()
+    )
+
+    daily = start_agg.merge(
+        end_agg,
+        on=["cst_date", group_col],
+        how="inner"
+    )
+
+    daily["ret_pct"] = (
+        100
+        * (daily["end_pnl"] - daily["start_pnl"])
+        / ((daily["start_gross"] + daily["end_gross"]) / 2).replace(0, pd.NA)
+    )
+
+    daily["bucket"] = daily["ret_pct"].apply(classify_move)
+
+    return daily
 
 # -------------------------------------------------
 # HEATMAP RENDERER
@@ -251,7 +315,11 @@ latest = intraday[intraday["snapshot_ts"] == intraday["snapshot_ts"].max()]
 # -------------------------------------------------
 # TABS
 # -------------------------------------------------
-tab_sector, tab_price = st.tabs(["🏭 Sector Driven", "📈 Price Change Driven"])
+tab_sector, tab_daily, tab_price = st.tabs([
+    "🏭 Sector Driven",
+    "📆 Daily Sector Driven",
+    "📈 Price Change Driven"
+])
 
 # =================================================
 # TAB 1 — SECTOR DRIVEN
@@ -374,10 +442,119 @@ with tab_sector:
             ].sort_values("effective_price_change_pct"),
             width="stretch",
         )
-        
+
 # =================================================
-# TAB 2 — PRICE CHANGE DRIVEN
+# TAB 2 — DAILY SECTOR-DRIVEN PERFORMANCE
 # =================================================
+
+with tab_daily:
+    st.header("📆 Daily Sector-Driven Performance")
+
+    with st.expander("ℹ️ How this view is calculated", expanded=False):
+        st.markdown("""
+        **Daily movement definition**
+
+        Daily sector and cohort performance is calculated as:
+
+        **(End of Day P&L − Start of Day P&L) ÷ Average |Gross Notional|**
+
+        This:
+        - Uses only weekday data (Mon–Fri)
+        - Compares first vs last snapshot of each trading day
+        - Correctly handles long and short positions
+        - Avoids intraday noise
+
+        Arrow symbols follow the same logic as the intraday view.
+        """)
+
+    history = load_intraday_history()
+
+    history["snapshot_ts"] = pd.to_datetime(history["snapshot_ts"])
+
+    # ---- SECTOR DAILY RETURNS
+    sector_daily = compute_daily_returns(history, "egm_sector_v2")
+
+    sector_matrix = (
+        sector_daily
+        .pivot(index="egm_sector_v2", columns="cst_date", values="bucket")
+        .sort_index(axis=1)
+    )
+
+    render_heatmap(sector_matrix, "📆 Daily Sector Trend")
+
+    sel_sector = st.selectbox(
+        "🔎 Select Sector (Daily View)",
+        sector_matrix.index,
+        key="daily_sector"
+    )
+
+    # ---- NON COMM/TECH → INSTRUMENT CONTRIBUTION
+    if sel_sector != "Comm/Tech":
+        sector_rows = history[history["egm_sector_v2"] == sel_sector]
+
+        st.subheader("📋 Instrument Contribution (Latest Day)")
+
+        latest_day = sector_daily["cst_date"].max()
+
+        latest_rows = sector_rows[
+            sector_rows["snapshot_ts"]
+            == sector_rows[sector_rows["cst_date"] == latest_day]["snapshot_ts"].max()
+        ]
+
+        st.dataframe(
+            latest_rows[
+                ["ticker", "description", "quantity",
+                 "effective_price_change_pct", "nmv"]
+            ].sort_values("effective_price_change_pct"),
+            width="stretch",
+        )
+
+    # ---- COMM/TECH → COHORT DAILY VIEW
+    else:
+        cohorts = load_commtech_cohorts()
+        ct = history.merge(cohorts, on="ticker", how="inner")
+
+        cohort_daily = compute_daily_returns(ct, "cohort_name")
+
+        cohort_matrix = (
+            cohort_daily
+            .pivot(index="cohort_name", columns="cst_date", values="bucket")
+            .sort_index(axis=1)
+        )
+
+        render_heatmap(cohort_matrix, "📆 Comm/Tech — Daily Cohort Trend")
+
+        sel_cohort = st.selectbox(
+            "Select Cohort (Daily View)",
+            cohort_matrix.index,
+            key="daily_cohort"
+        )
+
+        latest_day = cohort_daily["cst_date"].max()
+
+        cohort_latest = (
+            ct[
+                (ct["cohort_name"] == sel_cohort)
+                & (ct["snapshot_ts"]
+                   == ct[ct["cst_date"] == latest_day]["snapshot_ts"].max())
+            ]
+        )
+
+        st.subheader(f"📋 Instrument Detail — {sel_cohort}")
+
+        st.dataframe(
+            cohort_latest[
+                ["ticker", "description", "quantity",
+                 "effective_price_change_pct", "nmv",
+                 "weight_pct", "is_primary"]
+            ].sort_values("effective_price_change_pct"),
+            width="stretch",
+        )
+               
+# =================================================
+# TAB 3 — PRICE CHANGE DRIVEN
+# =================================================
+
 with tab_price:
     st.header("📈 Price Change–Driven Analysis")
 
