@@ -550,12 +550,21 @@ with tab_daily:
 
         st.subheader(f"📋 Instrument Detail — {sel_cohort}")
 
+        display_cols = [
+            "ticker",
+            "quantity",
+            "effective_price_change_pct",
+            "nmv",
+        ]
+
+        # Optional fields — only include if present
+        for col in ["description", "weight_pct", "is_primary"]:
+            if col in cohort_latest.columns:
+                display_cols.append(col)
+
         st.dataframe(
-            cohort_latest[
-                ["ticker", "description", "quantity",
-                 "effective_price_change_pct", "nmv",
-                 "weight_pct", "is_primary"]
-            ].sort_values("effective_price_change_pct"),
+            cohort_latest[display_cols]
+            .sort_values("effective_price_change_pct"),
             width="stretch",
         )
                
