@@ -446,7 +446,6 @@ with tab_sector:
 # =================================================
 # TAB 2 — DAILY SECTOR-DRIVEN PERFORMANCE
 # =================================================
-
 with tab_daily:
     st.header("📆 Daily Sector-Driven Performance")
 
@@ -467,8 +466,10 @@ with tab_daily:
         Arrow symbols follow the same logic as the intraday view.
         """)
 
+    # -------------------------------------------------
+    # LOAD HISTORY (MULTI-DAY)
+    # -------------------------------------------------
     history = load_intraday_history()
-
     history["snapshot_ts"] = pd.to_datetime(history["snapshot_ts"])
 
     history["cst_date"] = (
@@ -477,7 +478,9 @@ with tab_daily:
         .dt.date
     )
 
-    # ---- SECTOR DAILY RETURNS
+    # -------------------------------------------------
+    # DAILY SECTOR RETURNS
+    # -------------------------------------------------
     sector_daily = compute_daily_returns(history, "egm_sector_v2")
 
     sector_matrix = (
@@ -494,28 +497,48 @@ with tab_daily:
         key="daily_sector"
     )
 
-    # ---- NON COMM/TECH → INSTRUMENT CONTRIBUTION
+    latest_day = sector_daily["cst_date"].max()
+
+    # -------------------------------------------------
+    # NON COMM/TECH → INSTRUMENT CONTRIBUTION
+    # -------------------------------------------------
     if sel_sector != "Comm/Tech":
-        sector_rows = history[history["egm_sector_v2"] == sel_sector]
-
-        st.subheader("📋 Instrument Contribution (Latest Day)")
-
-        latest_day = sector_daily["cst_date"].max()
-
-        latest_rows = sector_rows[
-            sector_rows["snapshot_ts"]
-            == sector_rows[sector_rows["cst_date"] == latest_day]["snapshot_ts"].max()
+        sector_rows = history[
+            (history["egm_sector_v2"] == sel_sector)
+            & (history["cst_date"] == latest_day)
         ]
 
-        st.dataframe(
-            latest_rows[
-                ["ticker", "description", "quantity",
-                 "effective_price_change_pct", "nmv"]
-            ].sort_values("effective_price_change_pct"),
-            width="stretch",
-        )
+        if sector_rows.empty:
+            st.warning("No instrument data available for this sector.")
+        else:
+            latest_ts = sector_rows["snapshot_ts"].max()
+            latest_rows = sector_rows[sector_rows["snapshot_ts"] == latest_ts]
 
-    # ---- COMM/TECH → COHORT DAILY VIEW
+            st.subheader("📋 Instrument Contribution (Latest Day)")
+
+            preferred_cols = [
+                "ticker",
+                "description",
+                "quantity",
+                "effective_price_change_pct",
+                "nmv",
+            ]
+
+            display_cols = [c for c in preferred_cols if c in latest_rows.columns]
+
+            st.dataframe(
+                latest_rows[display_cols]
+                .sort_values(
+                    by="effective_price_change_pct"
+                    if "effective_price_change_pct" in display_cols
+                    else display_cols[0]
+                ),
+                width="stretch",
+            )
+
+    # -------------------------------------------------
+    # COMM/TECH → DAILY COHORT VIEW
+    # -------------------------------------------------
     else:
         cohorts = load_commtech_cohorts()
         ct = history.merge(cohorts, on="ticker", how="inner")
@@ -536,38 +559,41 @@ with tab_daily:
             key="daily_cohort"
         )
 
-        latest_day = cohort_daily["cst_date"].max()
-
-        latest_ts = (
-            ct.loc[ct["cst_date"] == latest_day, "snapshot_ts"]
-            .max()
-        )
-
-        cohort_latest = ct[
+        cohort_rows = ct[
             (ct["cohort_name"] == sel_cohort)
-            & (ct["snapshot_ts"] == latest_ts)
+            & (ct["cst_date"] == latest_day)
         ]
 
-        st.subheader(f"📋 Instrument Detail — {sel_cohort}")
+        if cohort_rows.empty:
+            st.warning("No cohort data available for the selected day.")
+        else:
+            latest_ts = cohort_rows["snapshot_ts"].max()
+            cohort_latest = cohort_rows[cohort_rows["snapshot_ts"] == latest_ts]
 
-        display_cols = [
-            "ticker",
-            "quantity",
-            "effective_price_change_pct",
-            "nmv",
-        ]
+            st.subheader(f"📋 Instrument Detail — {sel_cohort}")
 
-        # Optional fields — only include if present
-        for col in ["description", "weight_pct", "is_primary"]:
-            if col in cohort_latest.columns:
-                display_cols.append(col)
+            preferred_cols = [
+                "ticker",
+                "description",
+                "quantity",
+                "effective_price_change_pct",
+                "nmv",
+                "weight_pct",
+                "is_primary",
+            ]
 
-        st.dataframe(
-            cohort_latest[display_cols]
-            .sort_values("effective_price_change_pct"),
-            width="stretch",
-        )
-               
+            display_cols = [c for c in preferred_cols if c in cohort_latest.columns]
+
+            st.dataframe(
+                cohort_latest[display_cols]
+                .sort_values(
+                    by="effective_price_change_pct"
+                    if "effective_price_change_pct" in display_cols
+                    else display_cols[0]
+                ),
+                width="stretch",
+            )
+                           
 # =================================================
 # TAB 3 — PRICE CHANGE DRIVEN
 # =================================================
