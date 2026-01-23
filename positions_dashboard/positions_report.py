@@ -259,39 +259,44 @@ tab_sector, tab_price = st.tabs(["🏭 Sector Driven", "📈 Price Change Driven
 with tab_sector:
     st.header("🏭 Sector-Driven Intraday Performance")
 
-with st.expander("ℹ️ How to read this view", expanded=False):
-    st.markdown(
-        """
-        **Arrow legend**
+    # -------------------------------
+    # LEGEND / METHODOLOGY
+    # -------------------------------
+    with st.expander("ℹ️ How to read this view", expanded=False):
+        st.markdown(
+            """
+            **Arrow legend**
 
-        - ▲ = Up less than 1%  
-        - ▲▲ = Up 1–2%  
-        - ▲▲▲ = Up 2–3%  
-        - ▲▲▲▲ = Up more than 3%  
-        - ▼ = Down less than 1%  
-        - ▼▼ = Down 1–2%  
-        - ▼▼▼ = Down 2–3%  
-        - ▼▼▼▼ = Down more than 3%  
+            <span style="color:#1a7f37; font-weight:700;">▲</span> Up less than 1%  
+            <span style="color:#1a7f37; font-weight:700;">▲▲</span> Up 1–2%  
+            <span style="color:#1a7f37; font-weight:700;">▲▲▲</span> Up 2–3%  
+            <span style="color:#1a7f37; font-weight:700;">▲▲▲▲</span> Up more than 3%  
 
-        Green triangles indicate positive performance.  
-        Red triangles indicate negative performance.
+            <span style="color:#c62828; font-weight:700;">▼</span> Down less than 1%  
+            <span style="color:#c62828; font-weight:700;">▼▼</span> Down 1–2%  
+            <span style="color:#c62828; font-weight:700;">▼▼▼</span> Down 2–3%  
+            <span style="color:#c62828; font-weight:700;">▼▼▼▼</span> Down more than 3%  
 
-        ---
+            ---
 
-        **How sector and cohort movements are calculated**
+            **How sector and cohort movements are calculated**
 
-        Sector and cohort performance is calculated as:
+            Sector and cohort performance is calculated as:
 
-        **Σ Daily P&L ÷ Σ |Gross Notional|**
+            **Σ Daily P&L ÷ Σ |Gross Notional|**
 
-        This methodology:
-        - Correctly accounts for long and short positions  
-        - Treats short positions as benefiting from price declines  
-        - Weights positions by economic exposure  
-        - Avoids distortion from small positions with large % moves
-        """
-    )
-    
+            This methodology:
+            - Correctly accounts for long and short positions  
+            - Treats short positions as benefiting from price declines  
+            - Weights positions by economic exposure  
+            - Avoids distortion from small positions with large % moves
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # -------------------------------
+    # SECTOR RETURNS
+    # -------------------------------
     sector_ret = (
         intraday.groupby(["snapshot_ts", "time_label", "egm_sector_v2"])
         .agg(
@@ -309,11 +314,14 @@ with st.expander("ℹ️ How to read this view", expanded=False):
     sector_matrix = sector_ret.pivot(
         index="egm_sector_v2",
         columns="time_label",
-        values="bucket"
+        values="bucket",
     ).sort_index()
 
     render_heatmap(sector_matrix, "🏭 Sector Heatmap")
 
+    # -------------------------------
+    # DRILLDOWN
+    # -------------------------------
     sel_sector = st.selectbox("🔎 Select Sector", sector_matrix.index)
 
     if sel_sector != "Comm/Tech":
@@ -346,14 +354,15 @@ with st.expander("ℹ️ How to read this view", expanded=False):
         cohort_matrix = cohort_ret.pivot(
             index="cohort_name",
             columns="time_label",
-            values="bucket"
+            values="bucket",
         ).sort_index()
 
         render_heatmap(cohort_matrix, "🧩 Comm/Tech Cohort Heatmap")
 
         sel_cohort = st.selectbox("Select Cohort", cohort_matrix.index)
-        cohort_latest = latest.merge(cohorts, on="ticker").query(
-            "cohort_name == @sel_cohort"
+        cohort_latest = (
+            latest.merge(cohorts, on="ticker")
+            .query("cohort_name == @sel_cohort")
         )
 
         st.subheader(f"📋 Instrument Detail — {sel_cohort}")
@@ -365,7 +374,7 @@ with st.expander("ℹ️ How to read this view", expanded=False):
             ].sort_values("effective_price_change_pct"),
             width="stretch",
         )
-
+        
 # =================================================
 # TAB 2 — PRICE CHANGE DRIVEN
 # =================================================
