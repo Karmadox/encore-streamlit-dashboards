@@ -259,6 +259,39 @@ tab_sector, tab_price = st.tabs(["🏭 Sector Driven", "📈 Price Change Driven
 with tab_sector:
     st.header("🏭 Sector-Driven Intraday Performance")
 
+with st.expander("ℹ️ How to read this view", expanded=False):
+    st.markdown(
+        """
+        **Arrow legend**
+
+        - ▲ = Up less than 1%  
+        - ▲▲ = Up 1–2%  
+        - ▲▲▲ = Up 2–3%  
+        - ▲▲▲▲ = Up more than 3%  
+        - ▼ = Down less than 1%  
+        - ▼▼ = Down 1–2%  
+        - ▼▼▼ = Down 2–3%  
+        - ▼▼▼▼ = Down more than 3%  
+
+        Green triangles indicate positive performance.  
+        Red triangles indicate negative performance.
+
+        ---
+
+        **How sector and cohort movements are calculated**
+
+        Sector and cohort performance is calculated as:
+
+        **Σ Daily P&L ÷ Σ |Gross Notional|**
+
+        This methodology:
+        - Correctly accounts for long and short positions  
+        - Treats short positions as benefiting from price declines  
+        - Weights positions by economic exposure  
+        - Avoids distortion from small positions with large % moves
+        """
+    )
+    
     sector_ret = (
         intraday.groupby(["snapshot_ts", "time_label", "egm_sector_v2"])
         .agg(
