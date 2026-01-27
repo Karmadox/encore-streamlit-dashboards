@@ -46,6 +46,16 @@ def safe_select(df, cols):
     """Return only columns that actually exist in df"""
     return df[[c for c in cols if c in df.columns]]
 
+def safe_sort(df, preferred_cols):
+    """
+    Sort df by the first available column in preferred_cols.
+    If none exist, return df unchanged.
+    """
+    for col in preferred_cols:
+        if col in df.columns:
+            return df.sort_values(col)
+    return df
+
 # -------------------------------------------------
 # DATA LOADERS
 # -------------------------------------------------
@@ -214,15 +224,7 @@ with tab_sector:
             """
             **Arrow legend**
 
-            <span style="color:#1a7f37; font-weight:700;">▲</span> Up less than 1%  
-            <span style="color:#1a7f37; font-weight:700;">▲▲</span> Up 1–2%  
-            <span style="color:#1a7f37; font-weight:700;">▲▲▲</span> Up 2–3%  
-            <span style="color:#1a7f37; font-weight:700;">▲▲▲▲</span> Up more than 3%  
-
-            <span style="color:#c62828; font-weight:700;">▼</span> Down less than 1%  
-            <span style="color:#c62828; font-weight:700;">▼▼</span> Down 1–2%  
-            <span style="color:#c62828; font-weight:700;">▼▼▼</span> Down 2–3%  
-            <span style="color:#c62828; font-weight:700;">▼▼▼▼</span> Down more than 3%  
+            ▲ Up / ▼ Down (magnitude by count)
 
             **Σ Daily P&L ÷ Σ |Gross Notional|**
             """,
@@ -258,9 +260,7 @@ with tab_sector:
         key="intraday_sector_select",
     )
 
-    # -------------------------------
-    # SECTOR WITH COHORTS
-    # -------------------------------
+    # -------- SECTOR WITH COHORTS --------
     if sector_has_cohorts(sel_sector):
         cohorts = load_cohorts_for_sector(sel_sector, selected_date)
         ct = intraday.merge(cohorts, on="ticker", how="inner")
@@ -299,52 +299,44 @@ with tab_sector:
 
         st.subheader(f"📋 Instrument Detail — {sel_cohort}")
 
-        st.dataframe(
-            safe_select(
-                cohort_latest,
-                [
-                    "ticker",
-                    "description",
-                    "quantity",
-                    "effective_price_change_pct",
-                    "nmv",
-                    "weight_pct",
-                    "is_primary",
-                ],
-            ).sort_values("effective_price_change_pct"),
-            width="stretch",
+        df = safe_select(
+            cohort_latest,
+            [
+                "ticker",
+                "description",
+                "quantity",
+                "effective_price_change_pct",
+                "nmv",
+                "weight_pct",
+                "is_primary",
+            ],
         )
+        df = safe_sort(df, ["effective_price_change_pct", "nmv"])
+        st.dataframe(df, width="stretch")
 
-    # -------------------------------
-    # SECTOR WITHOUT COHORTS
-    # -------------------------------
+    # -------- SECTOR WITHOUT COHORTS --------
     else:
         st.subheader("📋 Instrument Detail")
 
-        st.dataframe(
-            safe_select(
-                latest[latest["egm_sector_v2"] == sel_sector],
-                [
-                    "ticker",
-                    "description",
-                    "quantity",
-                    "effective_price_change_pct",
-                    "nmv",
-                ],
-            ).sort_values("effective_price_change_pct"),
-            width="stretch",
+        df = safe_select(
+            latest[latest["egm_sector_v2"] == sel_sector],
+            [
+                "ticker",
+                "description",
+                "quantity",
+                "effective_price_change_pct",
+                "nmv",
+            ],
         )
+        df = safe_sort(df, ["effective_price_change_pct", "nmv"])
+        st.dataframe(df, width="stretch")
 
 # ============================
 # TAB 2 — DAILY SECTOR
 # ============================
+
 with tab_daily:
     st.header("📆 Daily Sector-Driven Performance")
-
-    with st.expander("ℹ️ How this view is calculated", expanded=False):
-        st.markdown("""
-        **(End of Day P&L − Start of Day P&L) ÷ Average |Gross Notional|**
-        """)
 
     history = load_intraday_history()
     history["snapshot_ts"] = pd.to_datetime(history["snapshot_ts"])
@@ -368,9 +360,7 @@ with tab_daily:
 
     latest_day = sector_daily["cst_date"].max()
 
-    # -------------------------------
-    # SECTOR WITH COHORTS
-    # -------------------------------
+    # -------- SECTOR WITH COHORTS --------
     if sector_has_cohorts(sel_sector):
         cohorts = load_cohorts_for_sector(sel_sector, selected_date)
         ct = history.merge(cohorts, on="ticker", how="inner")
@@ -400,27 +390,22 @@ with tab_daily:
             & (ct["snapshot_ts"] == latest_ts)
         ]
 
-        st.subheader(f"📋 Instrument Contribution — {sel_cohort}")
-
-        st.dataframe(
-            safe_select(
-                instrument_rows,
-                [
-                    "ticker",
-                    "description",
-                    "quantity",
-                    "effective_price_change_pct",
-                    "nmv",
-                    "weight_pct",
-                    "is_primary",
-                ],
-            ).sort_values("effective_price_change_pct"),
-            width="stretch",
+        df = safe_select(
+            instrument_rows,
+            [
+                "ticker",
+                "description",
+                "quantity",
+                "effective_price_change_pct",
+                "nmv",
+                "weight_pct",
+                "is_primary",
+            ],
         )
+        df = safe_sort(df, ["effective_price_change_pct", "nmv"])
+        st.dataframe(df, width="stretch")
 
-    # -------------------------------
-    # SECTOR WITHOUT COHORTS
-    # -------------------------------
+    # -------- SECTOR WITHOUT COHORTS --------
     else:
         latest_ts = history.loc[
             (history["egm_sector_v2"] == sel_sector)
@@ -433,21 +418,18 @@ with tab_daily:
             & (history["snapshot_ts"] == latest_ts)
         ]
 
-        st.subheader(f"📋 Instrument Contribution — {sel_sector}")
-
-        st.dataframe(
-            safe_select(
-                instrument_rows,
-                [
-                    "ticker",
-                    "description",
-                    "quantity",
-                    "effective_price_change_pct",
-                    "nmv",
-                ],
-            ).sort_values("effective_price_change_pct"),
-            width="stretch",
+        df = safe_select(
+            instrument_rows,
+            [
+                "ticker",
+                "description",
+                "quantity",
+                "effective_price_change_pct",
+                "nmv",
+            ],
         )
+        df = safe_sort(df, ["effective_price_change_pct", "nmv"])
+        st.dataframe(df, width="stretch")
 
 # ============================
 # TAB 3 — PRICE CHANGE
@@ -494,9 +476,7 @@ with tab_price:
 
     sector_df = bucket_df[bucket_df["egm_sector_v2"] == sel_sector]
 
-    # -------------------------------
-    # SECTOR WITH COHORTS
-    # -------------------------------
+    # -------- SECTOR WITH COHORTS --------
     if sector_has_cohorts(sel_sector):
         cohorts = load_cohorts_for_sector(sel_sector, selected_date)
         ct_df = sector_df.merge(cohorts, on="ticker", how="inner")
@@ -512,7 +492,6 @@ with tab_price:
             .sort_values("net_nmv", ascending=False)
         )
 
-        st.subheader("🧩 Cohort Breakdown")
         st.dataframe(cohort_view, width="stretch")
 
         sel_cohort = st.selectbox(
@@ -521,42 +500,32 @@ with tab_price:
             key="price_cohort_select",
         )
 
-        instrument_df = ct_df[ct_df["cohort_name"] == sel_cohort]
-
-        st.subheader(f"📋 Instrument Detail — {sel_cohort}")
-
-        st.dataframe(
-            safe_select(
-                instrument_df,
-                [
-                    "ticker",
-                    "description",
-                    "quantity",
-                    "effective_price_change_pct",
-                    "nmv",
-                    "weight_pct",
-                    "is_primary",
-                ],
-            ).sort_values("effective_price_change_pct"),
-            width="stretch",
+        df = safe_select(
+            ct_df[ct_df["cohort_name"] == sel_cohort],
+            [
+                "ticker",
+                "description",
+                "quantity",
+                "effective_price_change_pct",
+                "nmv",
+                "weight_pct",
+                "is_primary",
+            ],
         )
+        df = safe_sort(df, ["effective_price_change_pct", "nmv"])
+        st.dataframe(df, width="stretch")
 
-    # -------------------------------
-    # SECTOR WITHOUT COHORTS
-    # -------------------------------
+    # -------- SECTOR WITHOUT COHORTS --------
     else:
-        st.subheader(f"📋 Instrument Detail — {sel_sector}")
-
-        st.dataframe(
-            safe_select(
-                sector_df,
-                [
-                    "ticker",
-                    "description",
-                    "quantity",
-                    "effective_price_change_pct",
-                    "nmv",
-                ],
-            ).sort_values("effective_price_change_pct"),
-            width="stretch",
+        df = safe_select(
+            sector_df,
+            [
+                "ticker",
+                "description",
+                "quantity",
+                "effective_price_change_pct",
+                "nmv",
+            ],
         )
+        df = safe_sort(df, ["effective_price_change_pct", "nmv"])
+        st.dataframe(df, width="stretch")
