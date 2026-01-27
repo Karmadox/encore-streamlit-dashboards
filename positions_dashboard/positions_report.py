@@ -213,24 +213,47 @@ latest = intraday[intraday["snapshot_ts"] == intraday["snapshot_ts"].max()]
 # -------------------------------------------------
 tab_sector, tab_daily, tab_price = st.tabs(["🏭 Sector Driven", "📆 Daily Sector Driven", "📈 Price Change Driven"])
 
-# ============================
+# =================================================
 # TAB 1 — SECTOR DRIVEN
-# ============================
+# =================================================
 with tab_sector:
-    st.header("🏭 Sector-Driven Intraday Performance")
 
+    st.markdown("## 🏭 Sector-Driven Intraday Performance")
+
+    # -------------------------------
+    # LEGEND / METHODOLOGY
+    # -------------------------------
     with st.expander("ℹ️ How to read this view", expanded=False):
         st.markdown(
             """
             **Arrow legend**
 
-            ▲ Up / ▼ Down (magnitude by count)
+            <span style="color:#1a7f37; font-weight:700;">▲</span> Up less than 1%  
+            <span style="color:#1a7f37; font-weight:700;">▲▲</span> Up 1–2%  
+            <span style="color:#1a7f37; font-weight:700;">▲▲▲</span> Up 2–3%  
+            <span style="color:#1a7f37; font-weight:700;">▲▲▲▲</span> Up more than 3%  
+
+            <span style="color:#c62828; font-weight:700;">▼</span> Down less than 1%  
+            <span style="color:#c62828; font-weight:700;">▼▼</span> Down 1–2%  
+            <span style="color:#c62828; font-weight:700;">▼▼▼</span> Down 2–3%  
+            <span style="color:#c62828; font-weight:700;">▼▼▼▼</span> Down more than 3%  
+
+            ---
+
+            **How sector and cohort movements are calculated**
 
             **Σ Daily P&L ÷ Σ |Gross Notional|**
+
+            - Correctly accounts for long and short positions  
+            - Treats shorts as benefiting from price declines  
+            - Weights by economic exposure  
             """,
             unsafe_allow_html=True,
         )
 
+    # -------------------------------
+    # SECTOR HEATMAP
+    # -------------------------------
     sector_ret = (
         intraday
         .groupby(["snapshot_ts", "time_label", "egm_sector_v2"])
@@ -252,7 +275,6 @@ with tab_sector:
     )
 
     render_heatmap(sector_matrix, "🏭 Sector Heatmap")
-    st.markdown("---")
 
     sel_sector = st.selectbox(
         "Select Sector",
@@ -260,8 +282,11 @@ with tab_sector:
         key="intraday_sector_select",
     )
 
-    # -------- SECTOR WITH COHORTS --------
+    # -------------------------------
+    # SECTOR WITH COHORTS
+    # -------------------------------
     if sector_has_cohorts(sel_sector):
+
         cohorts = load_cohorts_for_sector(sel_sector, selected_date)
         ct = intraday.merge(cohorts, on="ticker", how="inner")
 
@@ -297,51 +322,74 @@ with tab_sector:
             .query("cohort_name == @sel_cohort")
         )
 
-        st.subheader(f"📋 Instrument Detail — {sel_cohort}")
+        st.markdown(f"**📋 Instrument Detail — {sel_cohort}**")
 
-        df = safe_select(
-            cohort_latest,
-            [
-                "ticker",
-                "description",
-                "quantity",
-                "effective_price_change_pct",
-                "nmv",
-                "weight_pct",
-                "is_primary",
-            ],
+        st.dataframe(
+            safe_select(
+                cohort_latest,
+                [
+                    "ticker",
+                    "description",
+                    "quantity",
+                    "effective_price_change_pct",
+                    "nmv",
+                    "weight_pct",
+                    "is_primary",
+                ],
+            ).sort_values("effective_price_change_pct"),
+            width="stretch",
         )
-        df = safe_sort(df, ["effective_price_change_pct", "nmv"])
-        st.dataframe(df, width="stretch")
 
-    # -------- SECTOR WITHOUT COHORTS --------
+    # -------------------------------
+    # SECTOR WITHOUT COHORTS
+    # -------------------------------
     else:
-        st.subheader("📋 Instrument Detail")
+        st.markdown(f"**📋 Instrument Detail — {sel_sector}**")
 
-        df = safe_select(
-            latest[latest["egm_sector_v2"] == sel_sector],
-            [
-                "ticker",
-                "description",
-                "quantity",
-                "effective_price_change_pct",
-                "nmv",
-            ],
+        st.dataframe(
+            safe_select(
+                latest[latest["egm_sector_v2"] == sel_sector],
+                [
+                    "ticker",
+                    "description",
+                    "quantity",
+                    "effective_price_change_pct",
+                    "nmv",
+                ],
+            ).sort_values("effective_price_change_pct"),
+            width="stretch",
         )
-        df = safe_sort(df, ["effective_price_change_pct", "nmv"])
-        st.dataframe(df, width="stretch")
 
-# ============================
-# TAB 2 — DAILY SECTOR
-# ============================
-
+# =================================================
+# TAB 2 — DAILY SECTOR-DRIVEN PERFORMANCE
+# =================================================
 with tab_daily:
-    st.header("📆 Daily Sector-Driven Performance")
 
+    st.markdown("## 📆 Daily Sector-Driven Performance")
+
+    with st.expander("ℹ️ How this view is calculated", expanded=False):
+        st.markdown(
+            """
+            **Daily movement definition**
+
+            **(End of Day P&L − Start of Day P&L) ÷ Average |Gross Notional|**
+
+            - Uses weekday data only (Mon–Fri)  
+            - Compares first vs last snapshot of each day  
+            - Correctly handles long and short positions  
+            """
+        )
+
+    # -------------------------------
+    # LOAD HISTORY
+    # -------------------------------
     history = load_intraday_history()
     history["snapshot_ts"] = pd.to_datetime(history["snapshot_ts"])
     history["cst_date"] = history["snapshot_ts"].dt.tz_convert("US/Central").dt.date
 
+    # -------------------------------
+    # DAILY SECTOR HEATMAP
+    # -------------------------------
     sector_daily = compute_daily_returns(history, "egm_sector_v2")
 
     sector_matrix = sector_daily.pivot(
@@ -360,8 +408,11 @@ with tab_daily:
 
     latest_day = sector_daily["cst_date"].max()
 
-    # -------- SECTOR WITH COHORTS --------
+    # -------------------------------
+    # SECTOR WITH COHORTS
+    # -------------------------------
     if sector_has_cohorts(sel_sector):
+
         cohorts = load_cohorts_for_sector(sel_sector, selected_date)
         ct = history.merge(cohorts, on="ticker", how="inner")
 
@@ -390,22 +441,27 @@ with tab_daily:
             & (ct["snapshot_ts"] == latest_ts)
         ]
 
-        df = safe_select(
-            instrument_rows,
-            [
-                "ticker",
-                "description",
-                "quantity",
-                "effective_price_change_pct",
-                "nmv",
-                "weight_pct",
-                "is_primary",
-            ],
-        )
-        df = safe_sort(df, ["effective_price_change_pct", "nmv"])
-        st.dataframe(df, width="stretch")
+        st.markdown(f"**📋 Instrument Contribution — {sel_cohort} ({latest_day})**")
 
-    # -------- SECTOR WITHOUT COHORTS --------
+        st.dataframe(
+            safe_select(
+                instrument_rows,
+                [
+                    "ticker",
+                    "description",
+                    "quantity",
+                    "effective_price_change_pct",
+                    "nmv",
+                    "weight_pct",
+                    "is_primary",
+                ],
+            ).sort_values("effective_price_change_pct"),
+            width="stretch",
+        )
+
+    # -------------------------------
+    # SECTOR WITHOUT COHORTS
+    # -------------------------------
     else:
         latest_ts = history.loc[
             (history["egm_sector_v2"] == sel_sector)
@@ -418,19 +474,22 @@ with tab_daily:
             & (history["snapshot_ts"] == latest_ts)
         ]
 
-        df = safe_select(
-            instrument_rows,
-            [
-                "ticker",
-                "description",
-                "quantity",
-                "effective_price_change_pct",
-                "nmv",
-            ],
-        )
-        df = safe_sort(df, ["effective_price_change_pct", "nmv"])
-        st.dataframe(df, width="stretch")
+        st.markdown(f"**📋 Instrument Contribution — {sel_sector} ({latest_day})**")
 
+        st.dataframe(
+            safe_select(
+                instrument_rows,
+                [
+                    "ticker",
+                    "description",
+                    "quantity",
+                    "effective_price_change_pct",
+                    "nmv",
+                ],
+            ).sort_values("effective_price_change_pct"),
+            width="stretch",
+        )
+        
 # ============================
 # TAB 3 — PRICE CHANGE
 # ============================
