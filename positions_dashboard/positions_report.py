@@ -59,7 +59,7 @@ def load_intraday(snapshot_date):
         return pd.read_sql(sql, conn, params=(snapshot_date,))
 
 @st.cache_data(ttl=300)
-def load_cohorts_for_sector(sector_code, as_of_date):
+def load_cohorts_for_sector(sector_name, as_of_date):
     sql = """
         SELECT
             i.ticker,
@@ -68,9 +68,9 @@ def load_cohorts_for_sector(sector_code, as_of_date):
             w.is_primary
         FROM encoredb.instrument_cohort_weights w
         JOIN encoredb.cohorts c ON w.cohort_id = c.cohort_id
-        JOIN encoredb.instruments i ON w.instrument_id = i.instrument_id
         JOIN encoredb.sectors s ON c.sector_id = s.sector_id
-        WHERE s.sector_code = %s
+        JOIN encoredb.instruments i ON w.instrument_id = i.instrument_id
+        WHERE s.sector_name = %s
           AND w.effective_date = (
               SELECT MAX(w2.effective_date)
               FROM encoredb.instrument_cohort_weights w2
@@ -80,7 +80,7 @@ def load_cohorts_for_sector(sector_code, as_of_date):
           )
     """
     with get_conn() as conn:
-        return pd.read_sql(sql, conn, params=(sector_code, as_of_date))
+        return pd.read_sql(sql, conn, params=(sector_name, as_of_date))
 
 @st.cache_data(ttl=300)
 def sector_has_cohorts(sector_name):
@@ -193,8 +193,7 @@ with tab_sector:
     sel_sector = st.selectbox("Select Sector", sector_matrix.index)
 
     if sector_has_cohorts(sel_sector):
-        sector_code = intraday.loc[intraday["egm_sector_v2"] == sel_sector, "egm_sector_code"].iloc[0]
-        cohorts = load_cohorts_for_sector(sector_code, selected_date)
+        cohorts = load_cohorts_for_sector(sel_sector, selected_date)
         ct = intraday.merge(cohorts, on="ticker", how="inner")
         cohort_ret = ct.groupby(["snapshot_ts","time_label","cohort_name"]).agg(
             pnl=("daily_pnl","sum"), gross=("gross_notional",lambda x:x.abs().sum())
