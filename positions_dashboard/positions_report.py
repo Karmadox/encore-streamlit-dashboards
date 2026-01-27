@@ -160,6 +160,75 @@ def render_heatmap(df, title):
     html += "</tbody></table></div>"
     components.html(html, height=420, scrolling=True)
 
+def compute_daily_returns(df, group_col):
+    """
+    Computes start-to-end-of-day return per group (sector or cohort).
+
+    Formula:
+        (End of Day P&L − Start of Day P&L)
+        ---------------------------------
+        Average |Gross Notional|
+    """
+
+    df = df.copy()
+
+    # Ensure CST date
+    df["cst_date"] = (
+        df["snapshot_ts"]
+        .dt.tz_convert("US/Central")
+        .dt.date
+    )
+
+    # Identify first and last snapshot per day
+    bounds = (
+        df.groupby("cst_date")["snapshot_ts"]
+        .agg(start_ts="min", end_ts="max")
+        .reset_index()
+    )
+
+    df = df.merge(bounds, on="cst_date", how="inner")
+
+    start_df = df[df["snapshot_ts"] == df["start_ts"]]
+    end_df   = df[df["snapshot_ts"] == df["end_ts"]]
+
+    abs_sum = lambda x: x.abs().sum()
+
+    start_agg = (
+        start_df
+        .groupby(["cst_date", group_col])
+        .agg(
+            start_pnl=("daily_pnl", "sum"),
+            start_gross=("gross_notional", abs_sum),
+        )
+        .reset_index()
+    )
+
+    end_agg = (
+        end_df
+        .groupby(["cst_date", group_col])
+        .agg(
+            end_pnl=("daily_pnl", "sum"),
+            end_gross=("gross_notional", abs_sum),
+        )
+        .reset_index()
+    )
+
+    daily = start_agg.merge(
+        end_agg,
+        on=["cst_date", group_col],
+        how="inner"
+    )
+
+    daily["ret_pct"] = (
+        100
+        * (daily["end_pnl"] - daily["start_pnl"])
+        / ((daily["start_gross"] + daily["end_gross"]) / 2).replace(0, pd.NA)
+    )
+
+    daily["bucket"] = daily["ret_pct"].apply(classify_move)
+
+    return daily
+    
 # -------------------------------------------------
 # LOAD DATA
 # -------------------------------------------------
