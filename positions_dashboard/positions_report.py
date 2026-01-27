@@ -56,6 +56,13 @@ def safe_sort(df, preferred_cols):
             return df.sort_values(col)
     return df
 
+def safe_sort(df, preferred_col):
+    if df.empty:
+        return df
+    if preferred_col in df.columns:
+        return df.sort_values(preferred_col)
+    return df.sort_values(df.columns[0])
+
 # -------------------------------------------------
 # DATA LOADERS
 # -------------------------------------------------
@@ -443,19 +450,21 @@ with tab_daily:
 
         st.markdown(f"**📋 Instrument Contribution — {sel_cohort} ({latest_day})**")
 
+        df = safe_select(
+            instrument_rows,
+            [
+                "ticker",
+                "description",
+                "quantity",
+                "effective_price_change_pct",
+                "nmv",
+                "weight_pct",
+                "is_primary",
+            ],
+        )
+
         st.dataframe(
-            safe_select(
-                instrument_rows,
-                [
-                    "ticker",
-                    "description",
-                    "quantity",
-                    "effective_price_change_pct",
-                    "nmv",
-                    "weight_pct",
-                    "is_primary",
-                ],
-            ).sort_values("effective_price_change_pct"),
+            safe_sort(df, "effective_price_change_pct"),
             width="stretch",
         )
 
@@ -476,17 +485,19 @@ with tab_daily:
 
         st.markdown(f"**📋 Instrument Contribution — {sel_sector} ({latest_day})**")
 
+        df = safe_select(
+            instrument_rows,
+            [
+                "ticker",
+                "description",
+                "quantity",
+                "effective_price_change_pct",
+                "nmv",
+            ],
+        )
+
         st.dataframe(
-            safe_select(
-                instrument_rows,
-                [
-                    "ticker",
-                    "description",
-                    "quantity",
-                    "effective_price_change_pct",
-                    "nmv",
-                ],
-            ).sort_values("effective_price_change_pct"),
+            safe_sort(df, "effective_price_change_pct"),
             width="stretch",
         )
 
@@ -572,27 +583,22 @@ with tab_price:
 
         instrument_df = ct_df[ct_df["cohort_name"] == sel_cohort]
 
-        cols = [
-            "ticker",
-            "description",
-            "quantity",
-            "effective_price_change_pct",
-            "nmv",
-            "weight_pct",
-            "is_primary",
-        ]
-
-        instrument_df = safe_select(instrument_df, cols)
-
-        sort_col = (
-            "effective_price_change_pct"
-            if "effective_price_change_pct" in instrument_df.columns
-            else instrument_df.columns[0]
+        df = safe_select(
+            instrument_df,
+            [
+                "ticker",
+                "description",
+                "quantity",
+                "effective_price_change_pct",
+                "nmv",
+                "weight_pct",
+                "is_primary",
+            ],
         )
 
         st.subheader(f"📋 Instrument Detail — {sel_cohort}")
         st.dataframe(
-            instrument_df.sort_values(sort_col),
+            safe_sort(df, "effective_price_change_pct"),
             width="stretch",
         )
 
@@ -600,7 +606,7 @@ with tab_price:
     # SECTOR WITHOUT COHORTS
     # --------------------------------
     else:
-        instrument_df = safe_select(
+        df = safe_select(
             sector_df,
             [
                 "ticker",
@@ -611,14 +617,8 @@ with tab_price:
             ],
         )
 
-        sort_col = (
-            "effective_price_change_pct"
-            if "effective_price_change_pct" in instrument_df.columns
-            else instrument_df.columns[0]
-        )
-
         st.subheader(f"📋 Instrument Detail — {sel_sector}")
         st.dataframe(
-            instrument_df.sort_values(sort_col),
+            safe_sort(df, "effective_price_change_pct"),
             width="stretch",
         )
