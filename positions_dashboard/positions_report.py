@@ -203,6 +203,43 @@ tab_sector, tab_daily, tab_price = st.tabs(["🏭 Sector Driven", "📆 Daily Se
 # TAB 1 — SECTOR DRIVEN
 # ============================
 with tab_sector:
+   st.header("🏭 Sector-Driven Intraday Performance")
+
+    # -------------------------------
+    # LEGEND / METHODOLOGY
+    # -------------------------------
+    with st.expander("ℹ️ How to read this view", expanded=False):
+        st.markdown(
+            """
+            **Arrow legend**
+
+            <span style="color:#1a7f37; font-weight:700;">▲</span> Up less than 1%  
+            <span style="color:#1a7f37; font-weight:700;">▲▲</span> Up 1–2%  
+            <span style="color:#1a7f37; font-weight:700;">▲▲▲</span> Up 2–3%  
+            <span style="color:#1a7f37; font-weight:700;">▲▲▲▲</span> Up more than 3%  
+
+            <span style="color:#c62828; font-weight:700;">▼</span> Down less than 1%  
+            <span style="color:#c62828; font-weight:700;">▼▼</span> Down 1–2%  
+            <span style="color:#c62828; font-weight:700;">▼▼▼</span> Down 2–3%  
+            <span style="color:#c62828; font-weight:700;">▼▼▼▼</span> Down more than 3%  
+
+            ---
+
+            **How sector and cohort movements are calculated**
+
+            Sector and cohort performance is calculated as:
+
+            **Σ Daily P&L ÷ Σ |Gross Notional|**
+
+            This methodology:
+            - Correctly accounts for long and short positions  
+            - Treats short positions as benefiting from price declines  
+            - Weights positions by economic exposure  
+            - Avoids distortion from small positions with large % moves
+            """,
+            unsafe_allow_html=True,
+        )
+
     sector_ret = intraday.groupby(["snapshot_ts","time_label","egm_sector_v2"]).agg(
         pnl=("daily_pnl","sum"),
         gross=("gross_notional",lambda x:x.abs().sum())
@@ -239,6 +276,22 @@ with tab_sector:
 # TAB 2 — DAILY SECTOR
 # ============================
 with tab_daily:
+
+    st.header("📆 Daily Sector-Driven Performance")
+
+    with st.expander("ℹ️ How this view is calculated", expanded=False):
+        st.markdown("""
+        **Daily movement definition**
+
+        Daily sector and cohort performance is calculated as:
+
+        **(End of Day P&L − Start of Day P&L) ÷ Average |Gross Notional|**
+
+        - Uses weekday data only (Mon–Fri)
+        - Compares first vs last snapshot per day
+        - Correctly handles long and short positions
+        """)
+
     history = load_intraday_history()
     history["snapshot_ts"] = pd.to_datetime(history["snapshot_ts"])
 
