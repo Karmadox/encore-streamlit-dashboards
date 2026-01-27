@@ -104,6 +104,17 @@ def load_intraday_history():
     with get_conn() as conn:
         return pd.read_sql(sql, conn)
 
+@st.cache_data(ttl=300)
+def load_sector_map():
+    sql = """
+        SELECT
+            sector_name,
+            sector_code
+        FROM encoredb.sectors
+    """
+    with get_conn() as conn:
+        return pd.read_sql(sql, conn)
+
 # -------------------------------------------------
 # MOVE BUCKETS
 # -------------------------------------------------
@@ -228,7 +239,7 @@ def compute_daily_returns(df, group_col):
     daily["bucket"] = daily["ret_pct"].apply(classify_move)
 
     return daily
-    
+
 # -------------------------------------------------
 # LOAD DATA
 # -------------------------------------------------
@@ -240,6 +251,11 @@ intraday.loc[intraday["quantity"] < 0, "price_change_pct"] *= -1
 intraday["move_bucket"] = intraday["price_change_pct"].apply(classify_move)
 
 latest = intraday[intraday["snapshot_ts"] == intraday["snapshot_ts"].max()]
+
+sector_map = load_sector_map()
+sector_name_to_code = dict(
+    zip(sector_map["sector_name"], sector_map["sector_code"])
+)
 
 # -------------------------------------------------
 # TABS
@@ -324,10 +340,10 @@ with tab_daily:
     # SECTOR HAS COHORTS → COHORT VIEW
     # -------------------------------
     if sector_has_cohorts(sel_sector):
-        sector_code = history.loc[
-            history["egm_sector_v2"] == sel_sector, "egm_sector_code"
-        ].iloc[0]
-
+        sector_code = sector_name_to_code.get(sel_sector)
+        if sector_code is None:
+            st.warning(f"No sector code found for {sel_sector}")
+            st.stop()
         cohorts = load_cohorts_for_sector(sector_code, selected_date)
         ct = history.merge(cohorts, on="ticker", how="inner")
 
