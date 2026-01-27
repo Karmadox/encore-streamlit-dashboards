@@ -206,7 +206,23 @@ def compute_daily_returns(df, group_col):
 # LOAD DATA
 # -------------------------------------------------
 intraday = load_intraday(selected_date)
+
+# -------------------------------------------------
+# HARD FILTER: keep only rows that belong to the
+# selected date in US/Central
+# -------------------------------------------------
 intraday["snapshot_ts"] = pd.to_datetime(intraday["snapshot_ts"])
+
+intraday["snapshot_cst_date"] = (
+    intraday["snapshot_ts"]
+    .dt.tz_convert("US/Central")
+    .dt.date
+)
+
+intraday = intraday[
+    intraday["snapshot_cst_date"] == selected_date
+].copy()
+
 intraday["time_label"] = intraday["snapshot_ts"].dt.tz_convert("US/Central").dt.strftime("%H:%M")
 
 intraday["effective_price_change_pct"] = intraday["price_change_pct"] * 100
