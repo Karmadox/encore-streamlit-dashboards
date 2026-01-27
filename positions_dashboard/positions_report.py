@@ -42,6 +42,10 @@ is_today = selected_date == date.today()
 if st.checkbox("🔄 Auto-refresh every 5 minutes", value=is_today, disabled=not is_today):
     st_autorefresh(interval=5 * 60 * 1000, key="positions_refresh")
 
+def safe_select(df, cols):
+    """Return only columns that actually exist in df"""
+    return df[[c for c in cols if c in df.columns]]
+
 # -------------------------------------------------
 # DATA LOADERS
 # -------------------------------------------------
@@ -205,9 +209,6 @@ tab_sector, tab_daily, tab_price = st.tabs(["🏭 Sector Driven", "📆 Daily Se
 with tab_sector:
     st.header("🏭 Sector-Driven Intraday Performance")
 
-    # -------------------------------
-    # LEGEND / METHODOLOGY
-    # -------------------------------
     with st.expander("ℹ️ How to read this view", expanded=False):
         st.markdown(
             """
@@ -223,20 +224,17 @@ with tab_sector:
             <span style="color:#c62828; font-weight:700;">▼▼▼</span> Down 2–3%  
             <span style="color:#c62828; font-weight:700;">▼▼▼▼</span> Down more than 3%  
 
-            ---
-
-            **How sector and cohort movements are calculated**
-
             **Σ Daily P&L ÷ Σ |Gross Notional|**
             """,
             unsafe_allow_html=True,
         )
 
     sector_ret = (
-        intraday.groupby(["snapshot_ts","time_label","egm_sector_v2"])
+        intraday
+        .groupby(["snapshot_ts", "time_label", "egm_sector_v2"])
         .agg(
-            pnl=("daily_pnl","sum"),
-            gross=("gross_notional",lambda x:x.abs().sum())
+            pnl=("daily_pnl", "sum"),
+            gross=("gross_notional", lambda x: x.abs().sum()),
         )
         .reset_index()
     )
@@ -248,7 +246,7 @@ with tab_sector:
     sector_matrix = sector_ret.pivot(
         index="egm_sector_v2",
         columns="time_label",
-        values="bucket"
+        values="bucket",
     )
 
     render_heatmap(sector_matrix, "🏭 Sector Heatmap")
@@ -257,18 +255,21 @@ with tab_sector:
     sel_sector = st.selectbox(
         "Select Sector",
         sector_matrix.index,
-        key="intraday_sector_select"
+        key="intraday_sector_select",
     )
 
+    # -------------------------------
+    # SECTOR WITH COHORTS
+    # -------------------------------
     if sector_has_cohorts(sel_sector):
         cohorts = load_cohorts_for_sector(sel_sector, selected_date)
         ct = intraday.merge(cohorts, on="ticker", how="inner")
 
         cohort_ret = (
-            ct.groupby(["snapshot_ts","time_label","cohort_name"])
+            ct.groupby(["snapshot_ts", "time_label", "cohort_name"])
             .agg(
-                pnl=("daily_pnl","sum"),
-                gross=("gross_notional",lambda x:x.abs().sum())
+                pnl=("daily_pnl", "sum"),
+                gross=("gross_notional", lambda x: x.abs().sum()),
             )
             .reset_index()
         )
@@ -280,7 +281,7 @@ with tab_sector:
         cohort_matrix = cohort_ret.pivot(
             index="cohort_name",
             columns="time_label",
-            values="bucket"
+            values="bucket",
         )
 
         render_heatmap(cohort_matrix, f"🧩 {sel_sector} — Cohorts")
@@ -288,7 +289,7 @@ with tab_sector:
         sel_cohort = st.selectbox(
             "Select Cohort",
             cohort_matrix.index,
-            key="intraday_cohort_select"
+            key="intraday_cohort_select",
         )
 
         cohort_latest = (
@@ -297,66 +298,64 @@ with tab_sector:
         )
 
         st.subheader(f"📋 Instrument Detail — {sel_cohort}")
+
         st.dataframe(
-            cohort_latest[
-                ["ticker","description","quantity",
-                 "effective_price_change_pct","nmv",
-                 "weight_pct","is_primary"]
-            ].sort_values("effective_price_change_pct"),
-            width="stretch"
+            safe_select(
+                cohort_latest,
+                [
+                    "ticker",
+                    "description",
+                    "quantity",
+                    "effective_price_change_pct",
+                    "nmv",
+                    "weight_pct",
+                    "is_primary",
+                ],
+            ).sort_values("effective_price_change_pct"),
+            width="stretch",
         )
 
+    # -------------------------------
+    # SECTOR WITHOUT COHORTS
+    # -------------------------------
     else:
         st.subheader("📋 Instrument Detail")
+
         st.dataframe(
-            latest[latest["egm_sector_v2"] == sel_sector][
-                ["ticker","description","quantity",
-                 "effective_price_change_pct","nmv"]
-            ].sort_values("effective_price_change_pct"),
-            width="stretch"
+            safe_select(
+                latest[latest["egm_sector_v2"] == sel_sector],
+                [
+                    "ticker",
+                    "description",
+                    "quantity",
+                    "effective_price_change_pct",
+                    "nmv",
+                ],
+            ).sort_values("effective_price_change_pct"),
+            width="stretch",
         )
 
 # ============================
 # TAB 2 — DAILY SECTOR
 # ============================
 with tab_daily:
-
     st.header("📆 Daily Sector-Driven Performance")
 
     with st.expander("ℹ️ How this view is calculated", expanded=False):
         st.markdown("""
-        **Daily movement definition**
-
-        Daily sector and cohort performance is calculated as:
-
         **(End of Day P&L − Start of Day P&L) ÷ Average |Gross Notional|**
-
-        - Uses weekday data only (Mon–Fri)
-        - Compares first vs last snapshot per day
-        - Correctly handles long and short positions
         """)
 
-    # --------------------------------
-    # LOAD HISTORY
-    # --------------------------------
     history = load_intraday_history()
     history["snapshot_ts"] = pd.to_datetime(history["snapshot_ts"])
+    history["cst_date"] = history["snapshot_ts"].dt.tz_convert("US/Central").dt.date
 
-    history["cst_date"] = (
-    history["snapshot_ts"]
-    .dt.tz_convert("US/Central")
-    .dt.date
-    )
-
-    # --------------------------------
-    # DAILY SECTOR HEATMAP
-    # --------------------------------
     sector_daily = compute_daily_returns(history, "egm_sector_v2")
 
-    sector_matrix = (
-        sector_daily
-        .pivot(index="egm_sector_v2", columns="cst_date", values="bucket")
-        .sort_index(axis=1)
+    sector_matrix = sector_daily.pivot(
+        index="egm_sector_v2",
+        columns="cst_date",
+        values="bucket",
     )
 
     render_heatmap(sector_matrix, "📆 Daily Sector Trend")
@@ -364,24 +363,24 @@ with tab_daily:
     sel_sector = st.selectbox(
         "Select Sector (Daily)",
         sector_matrix.index,
-        key="daily_sector_select"
+        key="daily_sector_select",
     )
 
     latest_day = sector_daily["cst_date"].max()
 
-    # --------------------------------
+    # -------------------------------
     # SECTOR WITH COHORTS
-    # --------------------------------
+    # -------------------------------
     if sector_has_cohorts(sel_sector):
         cohorts = load_cohorts_for_sector(sel_sector, selected_date)
         ct = history.merge(cohorts, on="ticker", how="inner")
 
         cohort_daily = compute_daily_returns(ct, "cohort_name")
 
-        cohort_matrix = (
-            cohort_daily
-            .pivot(index="cohort_name", columns="cst_date", values="bucket")
-            .sort_index(axis=1)
+        cohort_matrix = cohort_daily.pivot(
+            index="cohort_name",
+            columns="cst_date",
+            values="bucket",
         )
 
         render_heatmap(cohort_matrix, f"📆 {sel_sector} — Daily Cohorts")
@@ -389,69 +388,77 @@ with tab_daily:
         sel_cohort = st.selectbox(
             "Select Cohort (Daily)",
             cohort_matrix.index,
-            key="daily_cohort_select"
+            key="daily_cohort_select",
         )
 
-        latest_ts = (
-            ct.loc[ct["cst_date"] == latest_day, "snapshot_ts"]
-            .max()
-        )
+        latest_ts = ct.loc[
+            ct["cst_date"] == latest_day, "snapshot_ts"
+        ].max()
 
         instrument_rows = ct[
             (ct["cohort_name"] == sel_cohort)
             & (ct["snapshot_ts"] == latest_ts)
         ]
 
-        st.subheader(f"📋 Instrument Contribution — {sel_cohort} ({latest_day})")
+        st.subheader(f"📋 Instrument Contribution — {sel_cohort}")
+
         st.dataframe(
-            instrument_rows[
-                ["ticker","description","quantity",
-                 "effective_price_change_pct","nmv",
-                 "weight_pct","is_primary"]
-            ].sort_values("effective_price_change_pct"),
-            width="stretch"
+            safe_select(
+                instrument_rows,
+                [
+                    "ticker",
+                    "description",
+                    "quantity",
+                    "effective_price_change_pct",
+                    "nmv",
+                    "weight_pct",
+                    "is_primary",
+                ],
+            ).sort_values("effective_price_change_pct"),
+            width="stretch",
         )
 
-    # --------------------------------
+    # -------------------------------
     # SECTOR WITHOUT COHORTS
-    # --------------------------------
+    # -------------------------------
     else:
-        latest_ts = (
-            history.loc[
-                (history["egm_sector_v2"] == sel_sector)
-                & (history["cst_date"] == latest_day),
-                "snapshot_ts"
-            ].max()
-        )
+        latest_ts = history.loc[
+            (history["egm_sector_v2"] == sel_sector)
+            & (history["cst_date"] == latest_day),
+            "snapshot_ts",
+        ].max()
 
         instrument_rows = history[
             (history["egm_sector_v2"] == sel_sector)
             & (history["snapshot_ts"] == latest_ts)
         ]
 
-        st.subheader(f"📋 Instrument Contribution — {sel_sector} ({latest_day})")
+        st.subheader(f"📋 Instrument Contribution — {sel_sector}")
+
         st.dataframe(
-            instrument_rows[
-                ["ticker","description","quantity",
-                 "effective_price_change_pct","nmv"]
-            ].sort_values("effective_price_change_pct"),
-            width="stretch"
+            safe_select(
+                instrument_rows,
+                [
+                    "ticker",
+                    "description",
+                    "quantity",
+                    "effective_price_change_pct",
+                    "nmv",
+                ],
+            ).sort_values("effective_price_change_pct"),
+            width="stretch",
         )
 
 # ============================
 # TAB 3 — PRICE CHANGE
 # ============================
 with tab_price:
-
     st.header("📈 Price Change–Driven Analysis")
 
-    # --------------------------------
-    # PRICE MOVE DISTRIBUTION
-    # --------------------------------
     bucket_table = (
         intraday
-        .groupby(["time_label","move_bucket"])
-        .agg(names=("ticker","nunique"))
+        .groupby(["time_label", "move_bucket"])
+        .agg(names=("ticker", "nunique"))
         .reset_index()
         .pivot(index="move_bucket", columns="time_label", values="names")
         .reindex(BUCKET_ORDER)
@@ -464,16 +471,13 @@ with tab_price:
     sel_bucket = st.selectbox("Select Price Bucket", BUCKET_ORDER)
     bucket_df = latest[latest["move_bucket"] == sel_bucket]
 
-    # --------------------------------
-    # SECTOR BREAKDOWN
-    # --------------------------------
     sector_view = (
         bucket_df
         .groupby("egm_sector_v2")
         .agg(
-            names=("ticker","nunique"),
-            net_nmv=("nmv","sum"),
-            avg_move=("effective_price_change_pct","mean"),
+            names=("ticker", "nunique"),
+            net_nmv=("nmv", "sum"),
+            avg_move=("effective_price_change_pct", "mean"),
         )
         .reset_index()
         .sort_values("net_nmv", ascending=False)
@@ -485,25 +489,24 @@ with tab_price:
     sel_sector = st.selectbox(
         "Select Sector",
         sector_view["egm_sector_v2"],
-        key="price_sector_select"
+        key="price_sector_select",
     )
 
     sector_df = bucket_df[bucket_df["egm_sector_v2"] == sel_sector]
 
-    # --------------------------------
+    # -------------------------------
     # SECTOR WITH COHORTS
-    # --------------------------------
+    # -------------------------------
     if sector_has_cohorts(sel_sector):
         cohorts = load_cohorts_for_sector(sel_sector, selected_date)
         ct_df = sector_df.merge(cohorts, on="ticker", how="inner")
 
         cohort_view = (
-            ct_df
-            .groupby("cohort_name")
+            ct_df.groupby("cohort_name")
             .agg(
-                names=("ticker","nunique"),
-                net_nmv=("nmv","sum"),
-                avg_move=("effective_price_change_pct","mean"),
+                names=("ticker", "nunique"),
+                net_nmv=("nmv", "sum"),
+                avg_move=("effective_price_change_pct", "mean"),
             )
             .reset_index()
             .sort_values("net_nmv", ascending=False)
@@ -515,30 +518,45 @@ with tab_price:
         sel_cohort = st.selectbox(
             "Select Cohort",
             cohort_view["cohort_name"],
-            key="price_cohort_select"
+            key="price_cohort_select",
         )
 
         instrument_df = ct_df[ct_df["cohort_name"] == sel_cohort]
 
         st.subheader(f"📋 Instrument Detail — {sel_cohort}")
+
         st.dataframe(
-            instrument_df[
-                ["ticker","description","quantity",
-                 "effective_price_change_pct","nmv",
-                 "weight_pct","is_primary"]
-            ].sort_values("effective_price_change_pct"),
-            width="stretch"
+            safe_select(
+                instrument_df,
+                [
+                    "ticker",
+                    "description",
+                    "quantity",
+                    "effective_price_change_pct",
+                    "nmv",
+                    "weight_pct",
+                    "is_primary",
+                ],
+            ).sort_values("effective_price_change_pct"),
+            width="stretch",
         )
 
-    # --------------------------------
+    # -------------------------------
     # SECTOR WITHOUT COHORTS
-    # --------------------------------
+    # -------------------------------
     else:
         st.subheader(f"📋 Instrument Detail — {sel_sector}")
+
         st.dataframe(
-            sector_df[
-                ["ticker","description","quantity",
-                 "effective_price_change_pct","nmv"]
-            ].sort_values("effective_price_change_pct"),
-            width="stretch"
+            safe_select(
+                sector_df,
+                [
+                    "ticker",
+                    "description",
+                    "quantity",
+                    "effective_price_change_pct",
+                    "nmv",
+                ],
+            ).sort_values("effective_price_change_pct"),
+            width="stretch",
         )
