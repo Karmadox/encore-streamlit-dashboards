@@ -168,16 +168,42 @@ BUCKET_COLOR = {
 # HEATMAP
 # -------------------------------------------------
 def render_heatmap(df, title):
-    st.subheader(title)
-    html = "<div style='background:white;padding:10px;border-radius:8px;'><table style='width:100%;border-collapse:collapse;'>"
-    html += "<thead><tr><th>Name</th>" + "".join(f"<th>{c}</th>" for c in df.columns) + "</tr></thead><tbody>"
+    st.markdown(f"**{title}**")
+
+    if df.empty:
+        st.info("No data available.")
+        return
+
+    # Estimate height: header + rows (tight!)
+    row_height = 28
+    max_height = 320
+    height = min(max_height, 40 + row_height * len(df))
+
+    html = """
+    <div style="background:white;padding:6px;border-radius:6px;">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding:4px;">Name</th>
+    """
+
+    for c in df.columns:
+        html += f"<th style='padding:4px;text-align:center;'>{c}</th>"
+    html += "</tr></thead><tbody>"
+
     for idx, row in df.iterrows():
-        html += f"<tr><td><b>{idx}</b></td>"
+        html += f"<tr><td style='padding:4px;'><b>{idx}</b></td>"
         for v in row:
-            html += f"<td style='text-align:center;color:{BUCKET_COLOR.get(v,'#000')}'>{BUCKET_SYMBOL.get(v,'')}</td>"
+            html += (
+                f"<td style='padding:4px;text-align:center;"
+                f"color:{BUCKET_COLOR.get(v,'#000')};'>"
+                f"{BUCKET_SYMBOL.get(v,'')}</td>"
+            )
         html += "</tr>"
+
     html += "</tbody></table></div>"
-    components.html(html, height=420, scrolling=True)
+
+    components.html(html, height=height, scrolling=False)
 
 # -------------------------------------------------
 # DAILY RETURNS
@@ -521,7 +547,7 @@ with tab_daily:
                 safe_sort(df, "effective_price_change_pct"),
                 width="stretch",
             )
-            
+
 # ============================
 # TAB 3 — PRICE CHANGE
 # ============================
