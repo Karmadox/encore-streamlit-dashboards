@@ -431,16 +431,25 @@ with tab_price:
     sel_bucket = st.selectbox("Select Price-Move Bucket", BUCKET_ORDER)
     bucket_df = latest[latest["move_bucket"] == sel_bucket]
 
+    agg_dict = {
+    "ticker": ("ticker", "nunique"),
+    }
+
+    if "nmv" in bucket_df.columns:
+        agg_dict["net_nmv"] = ("nmv", "sum")
+
+    if "effective_price_change_pct" in bucket_df.columns:
+        agg_dict["avg_move"] = ("effective_price_change_pct", "mean")
+
     sector_view = (
-        bucket_df.groupby("egm_sector_v2")
-        .agg(
-            names=("ticker", "nunique"),
-            net_nmv=("nmv", "sum"),
-            avg_move=("effective_price_change_pct", "mean"),
-        )
+        bucket_df
+        .groupby("egm_sector_v2")
+        .agg(**agg_dict)
         .reset_index()
-        .sort_values("net_nmv", ascending=False)
     )
+
+    if "net_nmv" in sector_view.columns:
+        sector_view = sector_view.sort_values("net_nmv", ascending=False)
 
     st.subheader(f"🏭 Sector Breakdown — {sel_bucket}")
     st.dataframe(sector_view, width="stretch")
