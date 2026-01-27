@@ -342,6 +342,12 @@ with tab_daily:
     history = load_intraday_history()
     history["snapshot_ts"] = pd.to_datetime(history["snapshot_ts"])
 
+    history["cst_date"] = (
+    history["snapshot_ts"]
+    .dt.tz_convert("US/Central")
+    .dt.date
+    )
+
     # --------------------------------
     # DAILY SECTOR HEATMAP
     # --------------------------------
@@ -431,7 +437,7 @@ with tab_daily:
             ].sort_values("effective_price_change_pct"),
             width="stretch"
         )
-        
+
 # ============================
 # TAB 3 — PRICE CHANGE
 # ============================
