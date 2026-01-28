@@ -257,6 +257,13 @@ def trading_time_grid(start=time(9, 0), end=time(15, 0), freq_minutes=30):
 # -------------------------------------------------
 intraday = load_intraday(selected_date)
 
+st.write("RAW snapshot_ts (tail):")
+st.write(
+    intraday[["snapshot_ts"]]
+    .sort_values("snapshot_ts")
+    .tail(10)
+)
+
 from datetime import time
 
 TRADING_START = time(9, 0)
