@@ -262,9 +262,9 @@ from datetime import time
 TRADING_START = time(9, 0)
 TRADING_END   = time(15, 0)
 
-intraday["snapshot_ts"] = pd.to_datetime(intraday["snapshot_ts"])
+intraday["snapshot_ts"] = pd.to_datetime(intraday["snapshot_ts"], utc=True)
 
-# Convert once to CST
+# Convert once to CST (authoritative timestamp)
 intraday["snapshot_cst"] = intraday["snapshot_ts"].dt.tz_convert("US/Central")
 
 # Filter to selected CST date
@@ -279,6 +279,13 @@ intraday = intraday[
         TRADING_END
     )
 ].copy()
+
+# Fixed 30-minute buckets for heatmaps
+intraday["time_label"] = (
+    intraday["snapshot_cst"]
+    .dt.floor("30min")
+    .dt.strftime("%H:%M")
+)
 
 # Time label used by heatmaps
 intraday["time_label"] = (
