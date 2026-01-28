@@ -395,10 +395,10 @@ with tab_sector:
                 100 * cohort_ret["pnl"] / cohort_ret["gross"]
             ).apply(classify_move)
 
-            cohort_matrix = cohort_ret.pivot(
-                index="cohort_name",
-                columns="time_label",
-                values="bucket",
+            cohort_matrix = (
+                cohort_ret
+                .pivot(index="cohort_name", columns="time_label", values="bucket")
+                .reindex(columns=TIME_GRID)
             )
 
             render_heatmap(cohort_matrix, f"🧩 {sel_sector} — Cohorts")
