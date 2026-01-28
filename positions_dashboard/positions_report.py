@@ -530,7 +530,7 @@ with tab_daily:
             )
 
             latest_ts = ct.loc[
-                ct["cst_date"] == latest_day, "snapshot_cst"
+                ct["cst_date"] == latest_day, "snapshot_ts"
             ].max()
 
             instrument_rows = ct[
