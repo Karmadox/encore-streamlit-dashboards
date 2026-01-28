@@ -599,16 +599,16 @@ with tab_price:
     # PRICE MOVE DISTRIBUTION
     # --------------------------------
     bucket_table = (
-        intraday
-        .groupby(["time_label", "move_bucket"])
-        .agg(names=("ticker", "nunique"))
-        .reset_index()
-        .pivot(index="move_bucket", columns="time_label", values="names")
-        .reindex(BUCKET_ORDER)
-        .fillna(0)
-        .astype(int)
+    intraday
+    .groupby(["time_label", "move_bucket"])
+    .agg(names=("ticker", "nunique"))
+    .reset_index()
+    .pivot(index="move_bucket", columns="time_label", values="names")
+    .reindex(index=BUCKET_ORDER, columns=TIME_GRID)
+    .fillna(0)
+    .astype(int)
     )
-
+    
     st.dataframe(bucket_table, width="stretch")
 
     sel_bucket = st.selectbox("Select Price Bucket", BUCKET_ORDER)
