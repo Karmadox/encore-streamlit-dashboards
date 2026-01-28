@@ -17,11 +17,6 @@ st.title("📊 Encore – Positions Dashboard")
 def get_conn():
     return psycopg2.connect(**st.secrets["db"])
 
-from datetime import time
-
-TRADING_START = time(9, 0)
-TRADING_END   = time(15, 0)
-
 TIME_BUCKETS = [
     f"{h:02d}:{m:02d}"
     for h in range(9, 15)
@@ -260,7 +255,7 @@ intraday = load_intraday(selected_date)
 from datetime import time
 
 TRADING_START = time(9, 0)
-TRADING_END   = time(15, 0)
+TRADING_END   = time(15, 59, 59)
 
 intraday["snapshot_ts"] = pd.to_datetime(intraday["snapshot_ts"], utc=True)
 
@@ -281,13 +276,6 @@ intraday = intraday[
 ].copy()
 
 # Fixed 30-minute buckets for heatmaps
-intraday["time_label"] = (
-    intraday["snapshot_cst"]
-    .dt.floor("30min")
-    .dt.strftime("%H:%M")
-)
-
-# Time label used by heatmaps
 intraday["time_label"] = (
     intraday["snapshot_cst"]
     .dt.floor("30min")
@@ -368,7 +356,7 @@ with tab_sector:
             100 * sector_ret["pnl"] / sector_ret["gross"]
         ).apply(classify_move)
 
-        TIME_GRID = trading_time_grid()
+        TIME_GRID = TIME_BUCKETS
 
         sector_matrix = (
             sector_ret
@@ -542,7 +530,7 @@ with tab_daily:
             )
 
             latest_ts = ct.loc[
-                ct["cst_date"] == latest_day, "snapshot_ts"
+                ct["cst_date"] == latest_day, "snapshot_cst"
             ].max()
 
             instrument_rows = ct[
