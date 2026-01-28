@@ -17,6 +17,17 @@ st.title("📊 Encore – Positions Dashboard")
 def get_conn():
     return psycopg2.connect(**st.secrets["db"])
 
+from datetime import time
+
+TRADING_START = time(9, 0)
+TRADING_END   = time(15, 0)
+
+TIME_BUCKETS = [
+    f"{h:02d}:{m:02d}"
+    for h in range(9, 15)
+    for m in (0, 30)
+] + ["15:00"]
+
 # -------------------------------------------------
 # DATE HANDLING
 # -------------------------------------------------
@@ -228,28 +239,49 @@ def compute_daily_returns(df, group_col):
     d["bucket"] = d["ret_pct"].apply(classify_move)
     return d
 
+from datetime import time, datetime, timedelta
+
+def trading_time_grid(start=time(9, 0), end=time(15, 0), freq_minutes=30):
+    times = []
+    current = datetime.combine(date.today(), start)
+    end_dt = datetime.combine(date.today(), end)
+
+    while current <= end_dt:
+        times.append(current.strftime("%H:%M"))
+        current += timedelta(minutes=freq_minutes)
+
+    return times
+
 # -------------------------------------------------
 # LOAD DATA
 # -------------------------------------------------
 intraday = load_intraday(selected_date)
 
-# -------------------------------------------------
-# HARD FILTER: keep only rows that belong to the
-# selected date in US/Central
-# -------------------------------------------------
+from datetime import time
+
+TRADING_START = time(9, 0)
+TRADING_END   = time(15, 0)
+
 intraday["snapshot_ts"] = pd.to_datetime(intraday["snapshot_ts"])
 
-intraday["snapshot_cst_date"] = (
-    intraday["snapshot_ts"]
-    .dt.tz_convert("US/Central")
-    .dt.date
-)
+# Convert once to CST
+intraday["snapshot_cst"] = intraday["snapshot_ts"].dt.tz_convert("US/Central")
 
+# Filter to selected CST date
 intraday = intraday[
-    intraday["snapshot_cst_date"] == selected_date
+    intraday["snapshot_cst"].dt.date == selected_date
 ].copy()
 
-intraday["time_label"] = intraday["snapshot_ts"].dt.tz_convert("US/Central").dt.strftime("%H:%M")
+# Filter to regular trading hours (09:00–15:00 CST)
+intraday = intraday[
+    intraday["snapshot_cst"].dt.time.between(
+        TRADING_START,
+        TRADING_END
+    )
+].copy()
+
+# Time label used by heatmaps
+intraday["time_label"] = intraday["snapshot_cst"].dt.strftime("%H:%M")
 
 intraday["effective_price_change_pct"] = intraday["price_change_pct"] * 100
 intraday.loc[intraday["quantity"] < 0, "effective_price_change_pct"] *= -1
@@ -318,10 +350,12 @@ with tab_sector:
             100 * sector_ret["pnl"] / sector_ret["gross"]
         ).apply(classify_move)
 
-        sector_matrix = sector_ret.pivot(
-            index="egm_sector_v2",
-            columns="time_label",
-            values="bucket",
+        TIME_GRID = trading_time_grid()
+
+        sector_matrix = (
+            sector_ret
+            .pivot(index="egm_sector_v2", columns="time_label", values="bucket")
+            .reindex(columns=TIME_GRID)
         )
 
         render_heatmap(sector_matrix, "🏭 Sector Heatmap")
