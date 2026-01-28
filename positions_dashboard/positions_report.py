@@ -281,7 +281,11 @@ intraday = intraday[
 ].copy()
 
 # Time label used by heatmaps
-intraday["time_label"] = intraday["snapshot_cst"].dt.strftime("%H:%M")
+intraday["time_label"] = (
+    intraday["snapshot_cst"]
+    .dt.floor("30min")
+    .dt.strftime("%H:%M")
+)
 
 intraday["effective_price_change_pct"] = intraday["price_change_pct"] * 100
 intraday.loc[intraday["quantity"] < 0, "effective_price_change_pct"] *= -1
