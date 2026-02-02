@@ -129,6 +129,33 @@ def load_intraday_history():
     with get_conn() as conn:
         return pd.read_sql(sql, conn)
 
+@st.cache_data(ttl=600)
+def load_daily_eod():
+    sql = """
+        SELECT
+            p.snapshot_date,
+            i.ticker,
+            i.name AS description,
+            p.quantity,
+            p.gross_notional,
+            p.net_notional,
+            p.pnl_day,
+            p.effective_price_change_pct,
+            p.alignment_flag,
+            p.confidence_level,
+            s.sector_name AS egm_sector_v2
+        FROM encoredb.positions_eod_snapshot p
+        JOIN encoredb.instruments i
+          ON p.instrument_id = i.instrument_id
+        LEFT JOIN encoredb.instrument_sector_map ism
+          ON i.instrument_id = ism.instrument_id
+        LEFT JOIN encoredb.sectors s
+          ON ism.sector_id = s.sector_id
+        ORDER BY p.snapshot_date
+    """
+    with get_conn() as conn:
+        return pd.read_sql(sql, conn)
+
 # -------------------------------------------------
 # MOVE BUCKETS
 # -------------------------------------------------
@@ -211,28 +238,19 @@ def render_heatmap(df, title):
 
     components.html(html, height=height, scrolling=False)
 
-# -------------------------------------------------
-# DAILY RETURNS
-# -------------------------------------------------
-def compute_daily_returns(df, group_col):
-    df = df.copy()
-    df["cst_date"] = df["snapshot_ts"].dt.tz_convert("US/Central").dt.date
+def compute_daily_sector_buckets(df):
+    g = (
+        df.groupby(["snapshot_date", "egm_sector_v2"])
+          .agg(
+              pnl=("pnl_day", "sum"),
+              gross=("gross_notional", lambda x: x.abs().sum())
+          )
+          .reset_index()
+    )
 
-    bounds = df.groupby("cst_date")["snapshot_ts"].agg(start_ts="min", end_ts="max").reset_index()
-    df = df.merge(bounds, on="cst_date", how="inner")
-
-    abs_sum = lambda x: x.abs().sum()
-
-    start = df[df["snapshot_ts"] == df["start_ts"]]
-    end   = df[df["snapshot_ts"] == df["end_ts"]]
-
-    s = start.groupby(["cst_date", group_col]).agg(start_pnl=("daily_pnl","sum"), start_gross=("gross_notional",abs_sum)).reset_index()
-    e = end.groupby(["cst_date", group_col]).agg(end_pnl=("daily_pnl","sum"), end_gross=("gross_notional",abs_sum)).reset_index()
-
-    d = s.merge(e, on=["cst_date", group_col])
-    d["ret_pct"] = 100 * (d["end_pnl"] - d["start_pnl"]) / ((d["start_gross"] + d["end_gross"]) / 2)
-    d["bucket"] = d["ret_pct"].apply(classify_move)
-    return d
+    g["ret_pct"] = 100 * g["pnl"] / g["gross"]
+    g["bucket"] = g["ret_pct"].apply(classify_move)
+    return g
 
 from datetime import time, datetime, timedelta
 
@@ -454,7 +472,7 @@ with tab_sector:
             )
 
 # =================================================
-# TAB 2 — DAILY SECTOR-DRIVEN PERFORMANCE
+# TAB 2 — DAILY SECTOR-DRIVEN PERFORMANCE (EOD)
 # =================================================
 with tab_daily:
 
@@ -465,32 +483,55 @@ with tab_daily:
             """
             **Daily movement definition**
 
-            **(End of Day P&L − Start of Day P&L) ÷ Average |Gross Notional|**
+            **Σ Daily P&L ÷ Σ |Gross Notional|**
 
-            - Uses weekday data only (Mon–Fri)  
-            - Compares first vs last snapshot of each day  
+            - Uses end-of-day snapshots only  
+            - One authoritative value per trading day  
             - Correctly handles long and short positions  
+            - Stable historical record (no recomputation drift)  
             """
         )
 
     # -------------------------------
-    # LOAD HISTORY
+    # LOAD EOD DATA
     # -------------------------------
-    history = load_intraday_history()
-    history["snapshot_ts"] = pd.to_datetime(history["snapshot_ts"])
-    history["cst_date"] = history["snapshot_ts"].dt.tz_convert("US/Central").dt.date
+    daily = load_daily_eod()
+
+    if daily.empty:
+        st.info("No daily EOD data available.")
+        st.stop()
+
+    # -------------------------------
+    # DATE WINDOW (SCROLL CONTROL)
+    # -------------------------------
+    all_dates = sorted(daily["snapshot_date"].unique())
+    default_window = min(20, len(all_dates))
+
+    window = st.slider(
+        "Number of trading days to display",
+        min_value=5,
+        max_value=len(all_dates),
+        value=default_window,
+        key="daily_window_slider",
+    )
+
+    visible_dates = all_dates[-window:]
 
     # -------------------------------
     # DAILY SECTOR HEATMAP + SELECTOR
     # -------------------------------
     with st.container():
 
-        sector_daily = compute_daily_returns(history, "egm_sector_v2")
+        sector_daily = compute_daily_sector_buckets(daily)
 
-        sector_matrix = sector_daily.pivot(
-            index="egm_sector_v2",
-            columns="cst_date",
-            values="bucket",
+        sector_matrix = (
+            sector_daily
+            .pivot(
+                index="egm_sector_v2",
+                columns="snapshot_date",
+                values="bucket",
+            )
+            .reindex(columns=visible_dates)
         )
 
         render_heatmap(sector_matrix, "📆 Daily Sector Trend")
@@ -501,24 +542,47 @@ with tab_daily:
             key="daily_sector_select",
         )
 
-    latest_day = sector_daily["cst_date"].max()
+    latest_day = max(visible_dates)
 
     # -------------------------------
     # COHORT / INSTRUMENT VIEW
     # -------------------------------
     with st.container():
 
+        sector_rows = daily[
+            (daily["egm_sector_v2"] == sel_sector)
+            & (daily["snapshot_date"] == latest_day)
+        ].copy()
+
         if sector_has_cohorts(sel_sector):
 
-            cohorts = load_cohorts_for_sector(sel_sector, selected_date)
-            ct = history.merge(cohorts, on="ticker", how="inner")
+            cohorts = load_cohorts_for_sector(sel_sector, latest_day)
+            ct = sector_rows.merge(cohorts, on="ticker", how="inner")
 
-            cohort_daily = compute_daily_returns(ct, "cohort_name")
+            # ---------------------------
+            # COHORT DAILY HEATMAP
+            # ---------------------------
+            cohort_daily = (
+                daily.merge(cohorts, on="ticker", how="inner")
+                .groupby(["snapshot_date", "cohort_name"])
+                .agg(
+                    pnl=("pnl_day", "sum"),
+                    gross=("gross_notional", lambda x: x.abs().sum()),
+                )
+                .reset_index()
+            )
 
-            cohort_matrix = cohort_daily.pivot(
-                index="cohort_name",
-                columns="cst_date",
-                values="bucket",
+            cohort_daily["ret_pct"] = 100 * cohort_daily["pnl"] / cohort_daily["gross"]
+            cohort_daily["bucket"] = cohort_daily["ret_pct"].apply(classify_move)
+
+            cohort_matrix = (
+                cohort_daily
+                .pivot(
+                    index="cohort_name",
+                    columns="snapshot_date",
+                    values="bucket",
+                )
+                .reindex(columns=visible_dates)
             )
 
             render_heatmap(cohort_matrix, f"📆 {sel_sector} — Daily Cohorts")
@@ -529,16 +593,11 @@ with tab_daily:
                 key="daily_cohort_select",
             )
 
-            latest_ts = ct.loc[
-                ct["cst_date"] == latest_day, "snapshot_ts"
-            ].max()
+            instrument_rows = ct[ct["cohort_name"] == sel_cohort]
 
-            instrument_rows = ct[
-                (ct["cohort_name"] == sel_cohort)
-                & (ct["snapshot_ts"] == latest_ts)
-            ]
-
-            st.markdown(f"**📋 Instrument Contribution — {sel_cohort} ({latest_day})**")
+            st.markdown(
+                f"**📋 Instrument Contribution — {sel_cohort} ({latest_day})**"
+            )
 
             df = safe_select(
                 instrument_rows,
@@ -547,7 +606,7 @@ with tab_daily:
                     "description",
                     "quantity",
                     "effective_price_change_pct",
-                    "nmv",
+                    "net_notional",
                     "weight_pct",
                     "is_primary",
                 ],
@@ -559,27 +618,18 @@ with tab_daily:
             )
 
         else:
-            latest_ts = history.loc[
-                (history["egm_sector_v2"] == sel_sector)
-                & (history["cst_date"] == latest_day),
-                "snapshot_ts",
-            ].max()
-
-            instrument_rows = history[
-                (history["egm_sector_v2"] == sel_sector)
-                & (history["snapshot_ts"] == latest_ts)
-            ]
-
-            st.markdown(f"**📋 Instrument Contribution — {sel_sector} ({latest_day})**")
+            st.markdown(
+                f"**📋 Instrument Contribution — {sel_sector} ({latest_day})**"
+            )
 
             df = safe_select(
-                instrument_rows,
+                sector_rows,
                 [
                     "ticker",
                     "description",
                     "quantity",
                     "effective_price_change_pct",
-                    "nmv",
+                    "net_notional",
                 ],
             )
 
