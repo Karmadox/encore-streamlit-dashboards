@@ -419,12 +419,29 @@ latest = intraday[
 # -------------------------------------------------
 # TABS
 # -------------------------------------------------
-tab_sector, tab_daily, tab_price = st.tabs(["🏭 Sector Driven", "📆 Daily Sector Driven", "📈 Price Change Driven"])
+TAB_NAMES = [
+    "🏭 Sector Driven",
+    "📆 Daily Sector Driven",
+    "📈 Price Change Driven",
+]
+
+if "active_tab" not in st.session_state:
+    st.session_state.active_tab = TAB_NAMES[0]
+
+active_tab = st.radio(
+    "Navigation",
+    TAB_NAMES,
+    index=TAB_NAMES.index(st.session_state.active_tab),
+    horizontal=True,
+    label_visibility="collapsed",
+)
+
+st.session_state.active_tab = active_tab
 
 # =================================================
 # TAB 1 — SECTOR DRIVEN
 # =================================================
-with tab_sector:
+if active_tab == "🏭 Sector Driven":
 
     st.markdown("** 🏭 Sector-Driven Intraday Performance")
 
@@ -577,7 +594,7 @@ with tab_sector:
 # =================================================
 # TAB 2 — DAILY SECTOR-DRIVEN PERFORMANCE (EOD)
 # =================================================
-with tab_daily:
+elif active_tab == "📆 Daily Sector Driven":
 
     st.markdown("** 📆 Daily Sector-Driven Performance**")
 
@@ -757,7 +774,7 @@ with tab_daily:
 # ============================
 # TAB 3 — PRICE CHANGE
 # ============================
-with tab_price:
+elif active_tab == "📈 Price Change Driven":
 
     st.header("📈 Price Change–Driven Analysis")
 
