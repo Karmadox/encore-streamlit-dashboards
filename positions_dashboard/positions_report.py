@@ -412,7 +412,7 @@ tab_sector, tab_daily, tab_price = st.tabs(["🏭 Sector Driven", "📆 Daily Se
 # =================================================
 with tab_sector:
 
-    st.markdown("## 🏭 Sector-Driven Intraday Performance")
+    st.markdown("** 🏭 Sector-Driven Intraday Performance")
 
     # -------------------------------
     # LEGEND / METHODOLOGY
@@ -565,7 +565,7 @@ with tab_sector:
 # =================================================
 with tab_daily:
 
-    st.markdown("## 📆 Daily Sector-Driven Performance")
+    st.markdown("** 📆 Daily Sector-Driven Performance")
 
     with st.expander("ℹ️ How this view is calculated", expanded=False):
         st.markdown(
