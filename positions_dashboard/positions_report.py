@@ -9,6 +9,40 @@ import streamlit.components.v1 as components
 # STREAMLIT CONFIG
 # -------------------------------------------------
 st.set_page_config(page_title="Encore Positions Dashboard", layout="wide")
+st.markdown(
+    """
+    <style>
+    /* Reduce spacing between blocks */
+    .block-container {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+    }
+
+    /* Tighten headers */
+    h1, h2, h3 {
+        margin-top: 0.4rem !important;
+        margin-bottom: 0.4rem !important;
+    }
+
+    /* Reduce gap after expanders */
+    div[data-testid="stExpander"] {
+        margin-bottom: 0.3rem;
+    }
+
+    /* Reduce dataframe spacing */
+    div[data-testid="stDataFrame"] {
+        margin-top: 0.2rem;
+        margin-bottom: 0.2rem;
+    }
+
+    /* Reduce markdown spacing */
+    div[data-testid="stMarkdown"] {
+        margin-bottom: 0.2rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 st.title("📊 Encore – Positions Dashboard")
 
 # -------------------------------------------------
