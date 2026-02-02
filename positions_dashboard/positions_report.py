@@ -129,33 +129,49 @@ def load_intraday_history():
     with get_conn() as conn:
         return pd.read_sql(sql, conn)
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300)
 def load_daily_eod():
     sql = """
         SELECT
-            p.snapshot_date,
+            e.snapshot_date,
+            e.snapshot_ts,
             i.ticker,
             i.name AS description,
-            p.quantity,
-            p.gross_notional,
-            p.net_notional,
-            p.pnl_day,
-            p.effective_price_change_pct,
-            p.alignment_flag,
-            p.confidence_level,
-            s.sector_name AS egm_sector_v2
-        FROM encoredb.positions_eod_snapshot p
-        JOIN encoredb.instruments i
-          ON p.instrument_id = i.instrument_id
-        LEFT JOIN encoredb.instrument_sector_map ism
-          ON i.instrument_id = ism.instrument_id
-        LEFT JOIN encoredb.sectors s
-          ON ism.sector_id = s.sector_id
-        ORDER BY p.snapshot_date
-    """
-    with get_conn() as conn:
-        return pd.read_sql(sql, conn)
 
+            -- position metrics
+            e.quantity,
+            e.gross_notional,
+            e.net_notional,
+            e.pnl_day,
+            e.effective_price_change_pct,
+
+            -- market state
+            e.dir_short,
+            e.dir_medium,
+            e.dir_structural,
+            e.alignment_flag,
+            e.confidence_level,
+
+            -- sector
+            s.sector_name AS egm_sector_v2
+
+        FROM encoredb.positions_eod_snapshot e
+        JOIN encoredb.instruments i
+          ON e.instrument_id = i.instrument_id
+        LEFT JOIN encoredb.instrument_sectors isec
+          ON isec.instrument_id = i.instrument_id
+        LEFT JOIN encoredb.sectors s
+          ON s.sector_id = isec.sector_id
+
+        WHERE EXTRACT(ISODOW FROM e.snapshot_date) BETWEEN 1 AND 5
+        ORDER BY e.snapshot_date
+    """
+
+    with get_conn() as conn:
+        df = pd.read_sql(sql, conn)
+
+    return df
+    
 # -------------------------------------------------
 # MOVE BUCKETS
 # -------------------------------------------------
