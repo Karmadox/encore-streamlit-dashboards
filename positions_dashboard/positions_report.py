@@ -583,7 +583,7 @@ with tab_daily:
             sector_daily
             .pivot(
                 index="egm_sector_v2",
-                columns="snapshot_date",
+                columns="cst_date",
                 values="bucket",
             )
             .reindex(columns=visible_dates)
@@ -606,7 +606,7 @@ with tab_daily:
 
         sector_rows = daily[
             (daily["egm_sector_v2"] == sel_sector)
-            & (daily["snapshot_date"] == latest_day)
+            & (daily["cst_date"] == latest_day)
         ].copy()
 
         if sector_has_cohorts(sel_sector):
@@ -619,7 +619,7 @@ with tab_daily:
             # ---------------------------
             cohort_daily = (
                 daily.merge(cohorts, on="ticker", how="inner")
-                .groupby(["snapshot_date", "cohort_name"])
+                .groupby(["cst_date", "cohort_name"])
                 .agg(
                     pnl=("pnl_day", "sum"),
                     gross=("gross_notional", lambda x: x.abs().sum()),
@@ -634,7 +634,7 @@ with tab_daily:
                 cohort_daily
                 .pivot(
                     index="cohort_name",
-                    columns="snapshot_date",
+                    columns="cst_date",
                     values="bucket",
                 )
                 .reindex(columns=visible_dates)
