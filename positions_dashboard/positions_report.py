@@ -12,32 +12,46 @@ st.set_page_config(page_title="Encore Positions Dashboard", layout="wide")
 st.markdown(
     """
     <style>
-    /* Reduce spacing between blocks */
+    /* Overall page padding */
     .block-container {
-        padding-top: 1rem;
-        padding-bottom: 1rem;
+        padding-top: 0.6rem;
+        padding-bottom: 0.6rem;
     }
 
-    /* Tighten headers */
+    /* Tight headers */
     h1, h2, h3 {
-        margin-top: 0.4rem !important;
-        margin-bottom: 0.4rem !important;
+        margin-top: 0.3rem !important;
+        margin-bottom: 0.3rem !important;
     }
 
-    /* Reduce gap after expanders */
+    /* Remove container padding */
+    div[data-testid="stVerticalBlock"] > div {
+        gap: 0.2rem;
+    }
+
+    /* Kill iframe spacing from components.html */
+    iframe {
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        display: block;
+    }
+
+    /* Tighten expanders */
     div[data-testid="stExpander"] {
-        margin-bottom: 0.3rem;
+        margin-bottom: 0.2rem !important;
     }
 
-    /* Reduce dataframe spacing */
-    div[data-testid="stDataFrame"] {
-        margin-top: 0.2rem;
-        margin-bottom: 0.2rem;
-    }
-
-    /* Reduce markdown spacing */
+    /* Tight markdown blocks */
     div[data-testid="stMarkdown"] {
-        margin-bottom: 0.2rem;
+        margin-bottom: 0.15rem !important;
+    }
+
+    /* Tight dataframes */
+    div[data-testid="stDataFrame"] {
+        margin-top: 0.15rem !important;
+        margin-bottom: 0.15rem !important;
     }
     </style>
     """,
@@ -352,7 +366,7 @@ def render_heatmap(df, title):
 
     html += "</tbody></table></div>"
 
-    components.html(html, height=450, scrolling=False)
+    components.html(html, height=min(320, 40 + 26 * len(df)), scrolling=False)
 
 # -------------------------------------------------
 # LOAD DATA
@@ -565,7 +579,7 @@ with tab_sector:
 # =================================================
 with tab_daily:
 
-    st.markdown("** 📆 Daily Sector-Driven Performance")
+    st.markdown("** 📆 Daily Sector-Driven Performance**")
 
     with st.expander("ℹ️ How this view is calculated", expanded=False):
         st.markdown(
