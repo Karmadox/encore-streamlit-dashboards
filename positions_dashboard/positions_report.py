@@ -145,33 +145,38 @@ def load_daily_eod():
             e.pnl_day,
             e.effective_price_change_pct,
 
-            -- market state
+            -- directional state
             e.dir_short,
             e.dir_medium,
             e.dir_structural,
             e.alignment_flag,
             e.confidence_level,
 
-            -- sector
+            -- sector (derived via cohorts)
             s.sector_name AS egm_sector_v2
 
         FROM encoredb.positions_eod_snapshot e
         JOIN encoredb.instruments i
           ON e.instrument_id = i.instrument_id
-        LEFT JOIN encoredb.instrument_sectors isec
-          ON isec.instrument_id = i.instrument_id
+
+        -- sector via primary cohort
+        LEFT JOIN encoredb.instrument_cohort_weights w
+          ON w.instrument_id = i.instrument_id
+         AND w.is_primary = true
+
+        LEFT JOIN encoredb.cohorts c
+          ON c.cohort_id = w.cohort_id
+
         LEFT JOIN encoredb.sectors s
-          ON s.sector_id = isec.sector_id
+          ON s.sector_id = c.sector_id
 
         WHERE EXTRACT(ISODOW FROM e.snapshot_date) BETWEEN 1 AND 5
         ORDER BY e.snapshot_date
     """
 
     with get_conn() as conn:
-        df = pd.read_sql(sql, conn)
-
-    return df
-    
+        return pd.read_sql(sql, conn)
+        
 # -------------------------------------------------
 # MOVE BUCKETS
 # -------------------------------------------------
