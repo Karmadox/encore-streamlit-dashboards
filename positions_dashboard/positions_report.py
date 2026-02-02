@@ -292,7 +292,7 @@ def render_heatmap(df, title):
     html += "</tbody></table></div>"
 
     components.html(html, height=450, scrolling=False)
-    
+
 # -------------------------------------------------
 # LOAD DATA
 # -------------------------------------------------
@@ -550,7 +550,7 @@ with tab_daily:
     # -------------------------------
     with st.container():
 
-        sector_daily = compute_daily_sector_buckets(daily)
+        sector_daily = compute_daily_returns(daily, "egm_sector_v2")
 
         sector_matrix = (
             sector_daily
