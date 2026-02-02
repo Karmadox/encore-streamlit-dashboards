@@ -70,6 +70,33 @@ def safe_sort(df, preferred_col):
     return df.sort_values(df.columns[0])
 
 # -------------------------------------------------
+# DAILY RETURN BUCKETING (EOD + INTRADAY)
+# -------------------------------------------------
+def compute_daily_returns(df, group_col):
+    df = df.copy()
+
+    # Ensure CST date
+    df["cst_date"] = pd.to_datetime(df["snapshot_ts"], utc=True) \
+        .dt.tz_convert("US/Central") \
+        .dt.date
+
+    abs_sum = lambda x: x.abs().sum()
+
+    grouped = (
+        df.groupby(["cst_date", group_col])
+        .agg(
+            pnl=("pnl_day", "sum"),
+            gross=("gross_notional", abs_sum),
+        )
+        .reset_index()
+    )
+
+    grouped["ret_pct"] = 100 * grouped["pnl"] / grouped["gross"]
+    grouped["bucket"] = grouped["ret_pct"].apply(classify_move)
+
+    return grouped
+
+# -------------------------------------------------
 # DATA LOADERS
 # -------------------------------------------------
 @st.cache_data(ttl=60)
