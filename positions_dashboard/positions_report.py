@@ -176,7 +176,7 @@ def load_daily_eod():
 
     with get_conn() as conn:
         return pd.read_sql(sql, conn)
-        
+
 # -------------------------------------------------
 # MOVE BUCKETS
 # -------------------------------------------------
@@ -228,64 +228,71 @@ def render_heatmap(df, title):
         st.info("No data available.")
         return
 
-    # Estimate height: header + rows (tight!)
-    row_height = 28
-    max_height = 320
-    height = min(max_height, 40 + row_height * len(df))
-
     html = """
-    <div style="background:white;padding:6px;border-radius:6px;">
-      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+    <div style="
+        background:white;
+        padding:6px;
+        border-radius:6px;
+        overflow-x:auto;
+        overflow-y:auto;
+        max-height:420px;
+        border:1px solid #eee;
+    ">
+      <table style="
+        width:max-content;
+        min-width:100%;
+        border-collapse:collapse;
+        font-size:12px;
+      ">
         <thead>
           <tr>
-            <th style="text-align:left;padding:4px;">Name</th>
+            <th style="text-align:left;padding:4px;position:sticky;left:0;background:white;z-index:2;">
+              Name
+            </th>
     """
 
     for c in df.columns:
-        html += f"<th style='padding:4px;text-align:center;'>{c}</th>"
+        html += f"""
+        <th style="
+            padding:4px;
+            text-align:center;
+            white-space:nowrap;
+        ">{c}</th>
+        """
+
     html += "</tr></thead><tbody>"
 
     for idx, row in df.iterrows():
-        html += f"<tr><td style='padding:4px;'><b>{idx}</b></td>"
+        html += f"""
+        <tr>
+          <td style="
+              padding:4px;
+              font-weight:600;
+              position:sticky;
+              left:0;
+              background:white;
+              z-index:1;
+          ">{idx}</td>
+        """
+
         for v in row:
-            html += (
-                f"<td style='padding:4px;text-align:center;"
-                f"color:{BUCKET_COLOR.get(v,'#000')};'>"
-                f"{BUCKET_SYMBOL.get(v,'')}</td>"
-            )
+            html += f"""
+            <td style="
+                padding:4px;
+                text-align:center;
+                color:{BUCKET_COLOR.get(v,'#000')};
+                white-space:nowrap;
+            ">
+                {BUCKET_SYMBOL.get(v,'')}
+            </td>
+            """
+
         html += "</tr>"
 
     html += "</tbody></table></div>"
 
-    components.html(html, height=height, scrolling=False)
-
-def compute_daily_sector_buckets(df):
-    g = (
-        df.groupby(["snapshot_date", "egm_sector_v2"])
-          .agg(
-              pnl=("pnl_day", "sum"),
-              gross=("gross_notional", lambda x: x.abs().sum())
-          )
-          .reset_index()
-    )
-
-    g["ret_pct"] = 100 * g["pnl"] / g["gross"]
-    g["bucket"] = g["ret_pct"].apply(classify_move)
-    return g
-
-from datetime import time, datetime, timedelta
-
-def trading_time_grid(start=time(9, 0), end=time(15, 0), freq_minutes=30):
-    times = []
-    current = datetime.combine(date.today(), start)
-    end_dt = datetime.combine(date.today(), end)
-
-    while current <= end_dt:
-        times.append(current.strftime("%H:%M"))
-        current += timedelta(minutes=freq_minutes)
-
-    return times
-
+    components.html(html, height=450, scrolling=False)
+    
 # -------------------------------------------------
 # LOAD DATA
 # -------------------------------------------------
