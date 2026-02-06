@@ -1,7 +1,6 @@
 import streamlit as st
 from pathlib import Path
 import streamlit.components.v1 as components
-from pathlib import Path
 
 # -------------------------------------------------
 # PAGE CONFIG
@@ -64,18 +63,13 @@ st.markdown(
             color: var(--encore-green-light);
             text-decoration: underline;
         }
-
-        .encore-muted {
-            color: var(--encore-grey);
-            font-size: 0.9rem;
-        }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
 # -------------------------------------------------
-# HEADER / BRAND (SVG SAFE — FIXED)
+# HEADER / BRAND
 # -------------------------------------------------
 svg_path = Path(__file__).parent / "assets" / "Logomark.svg"
 svg_code = svg_path.read_text()
@@ -115,11 +109,10 @@ header_html = f"""
 """
 
 components.html(header_html, height=160)
-
 st.divider()
 
 # -------------------------------------------------
-# DASHBOARD CARDS
+# ROW 1 — PORTFOLIO & MARKET
 # -------------------------------------------------
 col1, col2 = st.columns(2)
 
@@ -134,7 +127,7 @@ with col1:
             <ul class="dashboard-list">
                 <li>Sector-driven and price-driven views</li>
                 <li>Long / short aware performance</li>
-                <li>Comm/Tech cohort drill-downs</li>
+                <li>Cohort drill-downs</li>
                 <li>30-minute intraday snapshots</li>
             </ul>
             <div class="dashboard-link">
@@ -171,32 +164,59 @@ with col2:
     )
 
 # -------------------------------------------------
-# SECOND ROW — TRP
+# ROW 2 — OPERATIONS & CONTROLS
 # -------------------------------------------------
-st.markdown(
-    """
-    <div class="dashboard-card">
-        <div class="dashboard-title">
-            📉 TRP Dashboard
-            <span style="font-size:0.9rem; color:#9ca3af;">(Work in Progress)</span>
+col3, col4 = st.columns(2)
+
+with col3:
+    st.markdown(
+        """
+        <div class="dashboard-card">
+            <div class="dashboard-title">🛡️ Security Master & Monitoring</div>
+            <div class="dashboard-subtitle">
+                Data quality and assignment monitoring for Encore’s security master.
+            </div>
+            <ul class="dashboard-list">
+                <li>Instruments missing sector or cohort assignments</li>
+                <li>Primary cohort consistency checks</li>
+                <li>Sector → Cohort → Instrument drill-down</li>
+                <li>Early detection of Enfusion-driven breaks</li>
+            </ul>
+            <div class="dashboard-link">
+                👉 <a href="https://encore-monitoring.streamlit.app" target="_blank">
+                    Open Security Master Dashboard
+                </a>
+            </div>
         </div>
-        <div class="dashboard-subtitle">
-            Trading-related performance, execution quality, and risk analytics.
+        """,
+        unsafe_allow_html=True,
+    )
+
+with col4:
+    st.markdown(
+        """
+        <div class="dashboard-card">
+            <div class="dashboard-title">
+                📉 TRP Dashboard
+                <span style="font-size:0.9rem; color:#9ca3af;">(Work in Progress)</span>
+            </div>
+            <div class="dashboard-subtitle">
+                Trading-related performance, execution quality, and risk analytics.
+            </div>
+            <ul class="dashboard-list">
+                <li>Trade-level performance attribution</li>
+                <li>Risk-adjusted execution analysis</li>
+                <li>Post-trade review metrics</li>
+            </ul>
+            <div class="dashboard-link">
+                👉 <a href="https://encore-trpdashboard.streamlit.app" target="_blank">
+                    Open TRP Dashboard
+                </a>
+            </div>
         </div>
-        <ul class="dashboard-list">
-            <li>Trade-level performance attribution</li>
-            <li>Risk-adjusted execution analysis</li>
-            <li>Post-trade review metrics</li>
-        </ul>
-        <div class="dashboard-link">
-            👉 <a href="https://encore-trpdashboard.streamlit.app" target="_blank">
-                Open TRP Dashboard
-            </a>
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+        """,
+        unsafe_allow_html=True,
+    )
 
 # -------------------------------------------------
 # FOOTER
