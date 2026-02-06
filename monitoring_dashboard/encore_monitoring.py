@@ -75,27 +75,106 @@ def load_instruments_for_cohort(cohort_id):
         ORDER BY w.is_primary DESC, w.weight_pct DESC, i.ticker
     """
     with get_conn() as conn:
-        return pd.read_sql(
-            sql,
-            conn,
-            params=(sql_param(cohort_id),)
-        )
+        return pd.read_sql(sql, conn, params=(sql_param(cohort_id),))
 
 @st.cache_data(ttl=300)
-def load_missing_assignments():
+def load_security_master_issues():
+    """
+    Return instruments in latest positions that have
+    missing / ambiguous sector or cohort assignment,
+    with an explicit reason.
+    """
     sql = """
-        SELECT DISTINCT
-            i.instrument_id,
+        WITH latest_positions AS (
+            SELECT *
+            FROM encoredb.positions_eod_snapshot
+            WHERE snapshot_date = (
+                SELECT MAX(snapshot_date)
+                FROM encoredb.positions_eod_snapshot
+            )
+        ),
+
+        primary_candidates AS (
+            SELECT
+                w.instrument_id,
+                w.cohort_id,
+                w.effective_date
+            FROM encoredb.instrument_cohort_weights w
+            WHERE w.is_primary = true
+        ),
+
+        primary_valid AS (
+            SELECT
+                p.instrument_id,
+                MAX(w.effective_date) AS effective_date
+            FROM latest_positions p
+            LEFT JOIN primary_candidates w
+              ON w.instrument_id = p.instrument_id
+             AND w.effective_date <= p.snapshot_date
+            GROUP BY p.instrument_id
+        ),
+
+        primary_count AS (
+            SELECT
+                p.instrument_id,
+                COUNT(*) AS primary_count
+            FROM latest_positions p
+            JOIN primary_candidates w
+              ON w.instrument_id = p.instrument_id
+             AND w.effective_date <= p.snapshot_date
+            GROUP BY p.instrument_id
+        )
+
+        SELECT
             i.ticker,
-            i.name
-        FROM encoredb.positions_eod_snapshot p
+            i.name,
+
+            CASE
+                WHEN NOT EXISTS (
+                    SELECT 1
+                    FROM encoredb.instrument_cohort_weights w
+                    WHERE w.instrument_id = p.instrument_id
+                )
+                    THEN 'No cohort assignments exist'
+
+                WHEN pv.effective_date IS NULL
+                    THEN 'Primary cohort exists but only in the future'
+
+                WHEN pc.primary_count > 1
+                    THEN 'Multiple primary cohorts valid for date'
+
+                WHEN s.sector_id IS NULL
+                    THEN 'Primary cohort has no sector'
+
+                ELSE 'Unknown issue'
+            END AS issue_reason
+
+        FROM latest_positions p
         JOIN encoredb.instruments i
           ON i.instrument_id = p.instrument_id
+
+        LEFT JOIN primary_valid pv
+          ON pv.instrument_id = p.instrument_id
+
+        LEFT JOIN primary_count pc
+          ON pc.instrument_id = p.instrument_id
+
         LEFT JOIN encoredb.instrument_cohort_weights w
-          ON w.instrument_id = i.instrument_id
+          ON w.instrument_id = p.instrument_id
          AND w.is_primary = true
-         AND w.effective_date <= p.snapshot_date
-        WHERE w.instrument_id IS NULL
+         AND w.effective_date = pv.effective_date
+
+        LEFT JOIN encoredb.cohorts c
+          ON c.cohort_id = w.cohort_id
+
+        LEFT JOIN encoredb.sectors s
+          ON s.sector_id = c.sector_id
+
+        WHERE
+            pv.effective_date IS NULL
+            OR pc.primary_count > 1
+            OR s.sector_id IS NULL
+
         ORDER BY i.ticker
     """
     with get_conn() as conn:
@@ -108,23 +187,42 @@ def load_missing_assignments():
 st.title("🛡️ Encore Monitoring – Security Master")
 
 tabs = st.tabs([
-    "🚨 Unassigned Instruments",
+    "🚨 Instruments Requiring Attention",
     "🏭 Sector → Cohort → Instruments"
 ])
 
 # ==================================================
-# TAB 1 — MISSING ASSIGNMENTS
+# TAB 1 — SECURITY MASTER ISSUES
 # ==================================================
 with tabs[0]:
-    st.subheader("🚨 Instruments Missing Sector / Cohort Assignment")
+    st.subheader("🚨 Instruments Requiring Attention")
 
-    missing = load_missing_assignments()
+    issues = load_security_master_issues()
 
-    if missing.empty:
-        st.success("✅ All instruments are correctly assigned.")
+    if issues.empty:
+        st.success("✅ All instruments have valid sector & cohort assignments.")
     else:
-        st.warning(f"⚠ {len(missing)} instruments require attention")
-        st.dataframe(missing, use_container_width=True)
+        st.warning(f"⚠ {len(issues)} instruments require attention")
+
+        st.dataframe(
+            issues,
+            use_container_width=True
+        )
+
+        with st.expander("ℹ️ How to interpret issues"):
+            st.markdown(
+                """
+                **Issue meanings**
+                - **No cohort assignments exist**  
+                  → Instrument never mapped in `instrument_cohort_weights`
+                - **Primary cohort exists but only in the future**  
+                  → Missing historical backfill
+                - **Multiple primary cohorts valid for date**  
+                  → Duplicate primary mappings
+                - **Primary cohort has no sector**  
+                  → Cohort definition incomplete
+                """
+            )
 
 # ==================================================
 # TAB 2 — SECTOR → COHORT → INSTRUMENTS
