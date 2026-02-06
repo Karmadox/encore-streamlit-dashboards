@@ -183,7 +183,7 @@ with col3:
                 <li>Early detection of Enfusion-driven breaks</li>
             </ul>
             <div class="dashboard-link">
-                👉 <a href="https://encore-monitoring.streamlit.app" target="_blank">
+                👉 <a href="https://encore-monitoring-dashboard.streamlit.app/" target="_blank">
                     Open Security Master Dashboard
                 </a>
             </div>
