@@ -75,7 +75,48 @@ df = load_market_state(snapshot_date)
 # --------------------------------------------------
 
 st.title("📈 Nasdaq-100 — Market State")
-st.caption(f"Snapshot date: {snapshot_date}")
+st.caption(f"As of end of day: {snapshot_date.strftime('%d %b %Y')}")
+
+# --------------------------------------------------
+# HOW TO READ THIS CHART
+# --------------------------------------------------
+
+with st.expander("ℹ️ How to read this chart", expanded=False):
+    st.markdown("""
+**What this dashboard shows**
+
+A point-in-time view of the Nasdaq-100, combining:
+- index structure (weights & ranks)
+- market positioning (price, momentum, distance from highs)
+- expectations (analyst targets & ratings)
+- near-term risk (earnings timing)
+
+**Key fields**
+
+- **Last Price**  
+  End-of-day price for the snapshot date. All percentage moves are relative to this.
+
+- **% Change (1D / 5D / 1M / YTD)**  
+  Price performance over different horizons — helps distinguish short-term flow from structural trend.
+
+- **% from 52W High**  
+  How far the stock is below its 52-week high.  
+  Near zero = extended; large negative = lagging / potential mean reversion.
+
+- **% to Best Target**  
+  Difference between current price and the *most optimistic* analyst target.  
+  - **Positive (+)** → analysts see upside  
+  - **Negative (−)** → price is above analyst targets (expectations risk)
+
+- **Analyst Rating**  
+  Bloomberg consensus scale (typically **1 = Strong Buy**, **5 = Sell**).  
+  Useful as a *sentiment* indicator, not a signal.
+
+- **Days to Earnings**  
+  Calendar days until the next expected earnings report — critical for near-term volatility.
+""")
+
+st.divider()
 
 # --------------------------------------------------
 # TOP SUMMARY STRIP
@@ -132,6 +173,24 @@ if earnings_filter:
     filtered = filtered[filtered["days_to_earnings"].between(0, 14)]
 
 # --------------------------------------------------
+# FORMAT HELPERS
+# --------------------------------------------------
+
+def format_signed_pct(x):
+    if pd.isna(x):
+        return ""
+    return f"{x:+.1f}%"
+
+def color_signed_pct(x):
+    if pd.isna(x):
+        return ""
+    if x > 0:
+        return "color: #166534;"   # green
+    if x < 0:
+        return "color: #991b1b;"   # red
+    return ""
+
+# --------------------------------------------------
 # MAIN TABLE
 # --------------------------------------------------
 
@@ -142,6 +201,7 @@ display_cols = [
     "role_bucket",
     "index_rank",
     "index_weight_pct",
+    "last_price",
     "pct_change_1d",
     "pct_change_5d",
     "pct_change_1m",
@@ -158,20 +218,17 @@ styled = (
     .style
     .format({
         "index_weight_pct": "{:.3f}",
-        "pct_change_1d": "{:.2f}",
-        "pct_change_5d": "{:.2f}",
-        "pct_change_1m": "{:.2f}",
-        "pct_change_ytd": "{:.2f}",
-        "pct_from_52w_high": "{:.2f}",
-        "pct_to_best_target": "{:.1f}",
+        "last_price": "{:.2f}",
+        "pct_change_1d": "{:.2f}%",
+        "pct_change_5d": "{:.2f}%",
+        "pct_change_1m": "{:.2f}%",
+        "pct_change_ytd": "{:.2f}%",
+        "pct_from_52w_high": "{:.2f}%",
+        "pct_to_best_target": format_signed_pct,
     })
-    .background_gradient(
-        subset=["pct_change_1d"],
-        cmap="RdYlGn"
-    )
-    .background_gradient(
-        subset=["pct_from_52w_high"],
-        cmap="RdYlGn_r"
+    .applymap(
+        color_signed_pct,
+        subset=["pct_to_best_target"]
     )
 )
 
@@ -200,10 +257,10 @@ role_summary = (
 
 st.dataframe(
     role_summary.style.format({
-        "total_weight": "{:.2f}",
-        "avg_pct_from_high": "{:.2f}",
-        "pct_near_high": "{:.0f}",
-        "median_upside": "{:.1f}",
+        "total_weight": "{:.2f}%",
+        "avg_pct_from_high": "{:.2f}%",
+        "pct_near_high": "{:.0f}%",
+        "median_upside": format_signed_pct,
     }),
     use_container_width=True
 )
@@ -213,5 +270,5 @@ st.dataframe(
 # --------------------------------------------------
 
 st.caption(
-    f"Encore Analytics • Nasdaq-100 Market State • {date.today().isoformat()}"
+    f"Encore Analytics • Nasdaq-100 Market State • Generated {date.today().isoformat()}"
 )
