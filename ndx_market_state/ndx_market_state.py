@@ -153,10 +153,11 @@ with col_f1:
 
 with col_f2:
     max_rank = st.slider(
-        "Max index rank",
+        "Show top N index constituents (by weight)",
         min_value=1,
         max_value=101,
-        value=101
+        value=101,
+        help="Filters the table to the top N Nasdaq-100 constituents ranked by index weight."
     )
 
 with col_f3:
