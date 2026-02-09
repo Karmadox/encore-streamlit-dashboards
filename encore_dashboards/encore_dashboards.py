@@ -112,9 +112,9 @@ components.html(header_html, height=160)
 st.divider()
 
 # -------------------------------------------------
-# ROW 1 — PORTFOLIO & MARKET
+# ROW 1 — CORE MARKET & INDEX
 # -------------------------------------------------
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 
 with col1:
     st.markdown(
@@ -144,6 +144,30 @@ with col2:
     st.markdown(
         """
         <div class="dashboard-card">
+            <div class="dashboard-title">📈 Nasdaq-100 Market State</div>
+            <div class="dashboard-subtitle">
+                Canonical index-level view of concentration, regime, and earnings risk.
+            </div>
+            <ul class="dashboard-list">
+                <li>Index weight concentration and leadership</li>
+                <li>Price, momentum, and distance-to-high context</li>
+                <li>Analyst expectations and upside/downside asymmetry</li>
+                <li>Earnings timing across the index</li>
+            </ul>
+            <div class="dashboard-link">
+                👉 <a href="https://ndx-market-state.streamlit.app/" target="_blank">
+                    Open Nasdaq-100 Market State
+                </a>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+with col3:
+    st.markdown(
+        """
+        <div class="dashboard-card">
             <div class="dashboard-title">🌍 Market Dashboard</div>
             <div class="dashboard-subtitle">
                 Top-down market context and regime awareness.
@@ -166,9 +190,9 @@ with col2:
 # -------------------------------------------------
 # ROW 2 — OPERATIONS & CONTROLS
 # -------------------------------------------------
-col3, col4 = st.columns(2)
+col4, col5 = st.columns(2)
 
-with col3:
+with col4:
     st.markdown(
         """
         <div class="dashboard-card">
@@ -192,7 +216,7 @@ with col3:
         unsafe_allow_html=True,
     )
 
-with col4:
+with col5:
     st.markdown(
         """
         <div class="dashboard-card">
