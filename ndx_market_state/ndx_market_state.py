@@ -40,6 +40,8 @@ def load_market_state(snapshot_date):
         SELECT
             snapshot_date,
             ticker,
+            sector,
+            cohort,
             role_bucket,
             index_rank,
             index_weight_pct,
@@ -94,32 +96,29 @@ A point-in-time view of the Nasdaq-100, combining:
 **Key fields**
 
 - **Last Price**  
-  End-of-day price for the snapshot date. All percentage moves are relative to this.
+  End-of-day price for the snapshot date.
 
 - **% Change (1D / 5D / 1M / YTD)**  
-  Price performance over different horizons — helps distinguish short-term flow from structural trend.
+  Performance over different horizons — distinguishes flow vs structure.
 
 - **% from 52W High**  
-  How far the stock is below its 52-week high.  
-  Near zero = extended; large negative = lagging / potential mean reversion.
+  Near zero = extended; deeply negative = lagging / potential mean reversion.
 
 - **% to Best Target**  
-  Difference between current price and the *most optimistic* analyst target.  
-  - **Positive (+)** → analysts see upside  
-  - **Negative (−)** → price is above analyst targets (expectations risk)
+  Difference between price and most optimistic analyst target.  
+  + = upside expected, − = expectations risk.
 
 - **Analyst Rating**  
-  Bloomberg consensus scale (typically **1 = Strong Buy**, **5 = Sell**).  
-  Useful as a *sentiment* indicator, not a signal.
+  Bloomberg consensus (1 = Strong Buy, 5 = Sell).
 
 - **Days to Earnings**  
-  Calendar days until the next expected earnings report — critical for near-term volatility.
+  Time to next expected earnings report.
 """)
 
 st.divider()
 
 # --------------------------------------------------
-# TOP SUMMARY STRIP
+# TOP SUMMARY STRIP (GLOBAL)
 # --------------------------------------------------
 
 top5_weight = df.loc[df["index_rank"] <= 5, "index_weight_pct"].sum()
@@ -127,16 +126,6 @@ top10_weight = df.loc[df["index_rank"] <= 10, "index_weight_pct"].sum()
 pct_near_high = (df["pct_from_52w_high"] >= -10).mean() * 100
 earnings_7d = (df["days_to_earnings"].between(0, 7)).sum()
 earnings_14d = (df["days_to_earnings"].between(0, 14)).sum()
-
-c1, c2, c3, c4, c5 = st.columns(5)
-
-c1.metric("Top 5 weight", f"{top5_weight:.1f}%")
-c2.metric("Top 10 weight", f"{top10_weight:.1f}%")
-c3.metric("% within 10% of 52W high", f"{pct_near_high:.0f}%")
-c4.metric("Earnings ≤ 7 days", earnings_7d)
-c5.metric("Earnings ≤ 14 days", earnings_14d)
-
-st.divider()
 
 # --------------------------------------------------
 # FILTERS
@@ -157,7 +146,7 @@ with col_f2:
         min_value=1,
         max_value=101,
         value=101,
-        help="Filters the table to the top N Nasdaq-100 constituents ranked by index weight."
+        help="Filters to the top N Nasdaq-100 constituents by index weight."
     )
 
 with col_f3:
@@ -174,6 +163,27 @@ if earnings_filter:
     filtered = filtered[filtered["days_to_earnings"].between(0, 14)]
 
 # --------------------------------------------------
+# CONTEXTUAL METRICS (FILTER-AWARE)
+# --------------------------------------------------
+
+selected_weight = filtered["index_weight_pct"].sum()
+
+c1, c2, c3, c4, c5, c6 = st.columns(6)
+
+c1.metric("Top 5 weight", f"{top5_weight:.1f}%")
+c2.metric("Top 10 weight", f"{top10_weight:.1f}%")
+c3.metric(
+    "Selected weight",
+    f"{selected_weight:.1f}%",
+    help="Total Nasdaq-100 index weight of the currently selected instruments"
+)
+c4.metric("% within 10% of 52W high", f"{pct_near_high:.0f}%")
+c5.metric("Earnings ≤ 7 days", earnings_7d)
+c6.metric("Earnings ≤ 14 days", earnings_14d)
+
+st.divider()
+
+# --------------------------------------------------
 # FORMAT HELPERS
 # --------------------------------------------------
 
@@ -186,9 +196,9 @@ def color_signed_pct(x):
     if pd.isna(x):
         return ""
     if x > 0:
-        return "color: #166534;"   # green
+        return "color: #166534;"
     if x < 0:
-        return "color: #991b1b;"   # red
+        return "color: #991b1b;"
     return ""
 
 # --------------------------------------------------
@@ -199,6 +209,8 @@ st.subheader("📋 Canonical Market State")
 
 display_cols = [
     "ticker",
+    "sector",
+    "cohort",
     "role_bucket",
     "index_rank",
     "index_weight_pct",
@@ -227,10 +239,7 @@ styled = (
         "pct_from_52w_high": "{:.2f}%",
         "pct_to_best_target": format_signed_pct,
     })
-    .applymap(
-        color_signed_pct,
-        subset=["pct_to_best_target"]
-    )
+    .applymap(color_signed_pct, subset=["pct_to_best_target"])
 )
 
 st.dataframe(styled, use_container_width=True)
