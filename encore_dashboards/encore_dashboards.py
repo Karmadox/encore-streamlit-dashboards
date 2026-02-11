@@ -3,6 +3,36 @@ from pathlib import Path
 import streamlit.components.v1 as components
 
 # -------------------------------------------------
+# SIMPLE PASSWORD AUTH
+# -------------------------------------------------
+
+def check_password():
+
+    def password_entered():
+        if st.session_state["password"] == st.secrets["auth"]["password"]:
+            st.session_state["authenticated"] = True
+        else:
+            st.session_state["authenticated"] = False
+
+    if "authenticated" not in st.session_state:
+        st.text_input("Enter Password", type="password", key="password")
+        st.button("Login", on_click=password_entered)
+        return False
+
+    elif not st.session_state["authenticated"]:
+        st.text_input("Enter Password", type="password", key="password")
+        st.button("Login", on_click=password_entered)
+        st.error("Incorrect password")
+        return False
+
+    else:
+        return True
+
+
+if not check_password():
+    st.stop()
+
+# -------------------------------------------------
 # PAGE CONFIG
 # -------------------------------------------------
 st.set_page_config(
