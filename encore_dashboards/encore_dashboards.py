@@ -293,7 +293,7 @@ with col6:
                 <li>Institutional-grade trade audit trail</li>
             </ul>
             <div class="dashboard-link">
-                👉 <a href="https://encore-tradeblotter.streamlit.app" target="_blank">
+                👉 <a href="https://encore-trade-blotter.streamlit.app" target="_blank">
                     Open Trade Blotter
                 </a>
             </div>
