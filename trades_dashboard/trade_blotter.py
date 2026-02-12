@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 # -------------------------------------------------
 # SIMPLE PASSWORD AUTH
@@ -88,7 +88,7 @@ def load_trades_for_ticker(ticker):
     return pd.DataFrame(rows)
 
 # ==========================================================
-# ENHANCED FIFO ENGINE (LONG + SHORT)
+# FIFO ENGINE (LONG + SHORT)
 # ==========================================================
 
 def build_fifo_ledger(df):
@@ -144,6 +144,104 @@ def build_fifo_ledger(df):
         else:
 
             sell_qty = abs(qty)
-            side_label = "SELL (Close Long)" if open_long_lots else "SELL (Open Short)"_
+            side_label = "SELL (Close Long)" if open_long_lots else "SELL (Open Short)"
+
+            while sell_qty > 0 and open_long_lots:
+                lot = open_long_lots[0]
+                matched = min(lot["remaining_qty"], sell_qty)
+
+                pnl = matched * (price - lot["price"])
+                realized_pnl += pnl
+
+                lot["remaining_qty"] -= matched
+                sell_qty -= matched
+
+                if lot["remaining_qty"] == 0:
+                    open_long_lots.pop(0)
+
+            if sell_qty > 0:
+                open_short_lots.append({
+                    "remaining_qty": sell_qty,
+                    "price": price
+                })
+
+            running_position += qty
+
+        realized_pnl_total += realized_pnl
+
+        # ==============================
+        # Unrealized PnL (mark to trade price)
+        # ==============================
+        unrealized_pnl = Decimal("0")
+
+        for lot in open_long_lots:
+            unrealized_pnl += lot["remaining_qty"] * (price - lot["price"])
+
+        for lot in open_short_lots:
+            unrealized_pnl += lot["remaining_qty"] * (lot["price"] - price)
+
+        total_pnl = realized_pnl_total + unrealized_pnl
+        gross_notional = abs(running_position) * price
+
+        # Consistent rounding
+        def r(x):
+            return float(x.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+        ledger_rows.append({
+            "Trade Date": row["trade_date"],
+            "Side": side_label,
+            "Quantity": r(qty),
+            "Price": r(price),
+            "Trade Notional": r(trade_notional),
+            "Gross Notional": r(gross_notional),
+            "Running Position": r(running_position),
+            "Realized PnL (Trade)": r(realized_pnl),
+            "Total Realized PnL": r(realized_pnl_total),
+            "Total Unrealized PnL": r(unrealized_pnl),
+            "Total PnL (Realized + Unrealized)": r(total_pnl)
+        })
+
+    ledger_df = pd.DataFrame(ledger_rows)
+
+    summary = {
+        "Final Position": r(running_position),
+        "Total Realized PnL": r(realized_pnl_total),
+        "Final Unrealized PnL": r(unrealized_pnl),
+        "Total PnL": r(total_pnl)
+    }
+
+    return ledger_df, summary
+
+# ==========================================================
+# STREAMLIT UI
+# ==========================================================
+
+st.set_page_config(layout="wide")
+st.title("📊 FIFO Trade Blotter Ledger")
+
+tickers = get_all_tickers()
+selected_ticker = st.selectbox("Select Ticker", tickers)
+
+if selected_ticker:
+
+    df = load_trades_for_ticker(selected_ticker)
+
+    if df.empty:
+        st.warning("No trades found.")
+    else:
+        ledger_df, summary = build_fifo_ledger(df)
+
+        st.subheader(f"Trade Ledger — {selected_ticker}")
+        st.dataframe(ledger_df, use_container_width=True)
+
+        st.subheader("Summary")
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        col1.metric("Final Position", f"{summary['Final Position']:,.2f}")
+        col2.metric("Realized PnL", f"${summary['Total Realized PnL']:,.2f}")
+        col3.metric("Unrealized PnL", f"${summary['Final Unrealized PnL']:,.2f}")
+        col4.metric("Total PnL", f"${summary['Total PnL']:,.2f}")
+
 
 
