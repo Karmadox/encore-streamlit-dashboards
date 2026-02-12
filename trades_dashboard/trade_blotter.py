@@ -30,7 +30,6 @@ def check_password():
     else:
         return True
 
-
 if not check_password():
     st.stop()
 
@@ -91,7 +90,7 @@ def load_trades_for_ticker(ticker):
     return pd.DataFrame(rows)
 
 # ==========================================================
-# CORRECT LONG + SHORT FIFO ENGINE
+# ENHANCED LONG + SHORT FIFO ENGINE
 # ==========================================================
 
 def build_fifo_ledger(df):
@@ -112,6 +111,8 @@ def build_fifo_ledger(df):
         trade_notional = qty * price
         realized_pnl = Decimal("0")
 
+        side_label = ""
+
         # ================================
         # BUY
         # ================================
@@ -119,23 +120,26 @@ def build_fifo_ledger(df):
 
             buy_qty = qty
 
-            # Close short first
+            if open_short_lots:
+                side_label = "BUY (Cover Short)"
+            else:
+                side_label = "BUY (Open Long)"
+
+            # Close shorts first
             while buy_qty > 0 and open_short_lots:
                 lot = open_short_lots[0]
+                matched = min(lot["remaining_qty"], buy_qty)
 
-                matched_qty = min(lot["remaining_qty"], buy_qty)
-
-                # SHORT PnL
-                pnl = matched_qty * (lot["price"] - price)
+                pnl = matched * (lot["price"] - price)
                 realized_pnl += pnl
 
-                lot["remaining_qty"] -= matched_qty
-                buy_qty -= matched_qty
+                lot["remaining_qty"] -= matched
+                buy_qty -= matched
 
                 if lot["remaining_qty"] == 0:
                     open_short_lots.pop(0)
 
-            # Open new long if remaining
+            # Open new long
             if buy_qty > 0:
                 open_long_lots.append({
                     "remaining_qty": buy_qty,
@@ -151,22 +155,26 @@ def build_fifo_ledger(df):
 
             sell_qty = abs(qty)
 
-            # Close long first
+            if open_long_lots:
+                side_label = "SELL (Close Long)"
+            else:
+                side_label = "SELL (Open Short)"
+
+            # Close longs first
             while sell_qty > 0 and open_long_lots:
                 lot = open_long_lots[0]
+                matched = min(lot["remaining_qty"], sell_qty)
 
-                matched_qty = min(lot["remaining_qty"], sell_qty)
-
-                pnl = matched_qty * (price - lot["price"])
+                pnl = matched * (price - lot["price"])
                 realized_pnl += pnl
 
-                lot["remaining_qty"] -= matched_qty
-                sell_qty -= matched_qty
+                lot["remaining_qty"] -= matched
+                sell_qty -= matched
 
                 if lot["remaining_qty"] == 0:
                     open_long_lots.pop(0)
 
-            # Open new short if remaining
+            # Open new short
             if sell_qty > 0:
                 open_short_lots.append({
                     "remaining_qty": sell_qty,
@@ -177,7 +185,25 @@ def build_fifo_ledger(df):
 
         realized_pnl_total += realized_pnl
 
-        # Avg cost only meaningful for long inventory
+        # ================================
+        # Unrealized PnL (mark to current trade price)
+        # ================================
+        unrealized_pnl = Decimal("0")
+
+        for lot in open_long_lots:
+            unrealized_pnl += lot["remaining_qty"] * (price - lot["price"])
+
+        for lot in open_short_lots:
+            unrealized_pnl += lot["remaining_qty"] * (lot["price"] - price)
+
+        # ================================
+        # Gross Notional
+        # ================================
+        gross_notional = abs(running_position) * price
+
+        # ================================
+        # Avg Cost (long only)
+        # ================================
         remaining_cost = sum(
             lot["remaining_qty"] * lot["price"]
             for lot in open_long_lots
@@ -191,13 +217,16 @@ def build_fifo_ledger(df):
 
         ledger_rows.append({
             "Trade Date": row["trade_date"],
+            "Side": side_label,
             "Quantity": float(qty),
             "Price": float(price),
             "Trade Notional": float(trade_notional),
+            "Gross Notional": float(gross_notional),
             "Running Position": float(running_position),
             "Avg Cost Basis": float(avg_cost),
             "Realized PnL (Trade)": float(realized_pnl),
-            "Total Realized PnL": float(realized_pnl_total)
+            "Total Realized PnL": float(realized_pnl_total),
+            "Total Unrealized PnL": float(unrealized_pnl)
         })
 
     ledger_df = pd.DataFrame(ledger_rows)
@@ -205,6 +234,7 @@ def build_fifo_ledger(df):
     summary = {
         "Final Position": float(running_position),
         "Total Realized PnL": float(realized_pnl_total),
+        "Final Unrealized PnL": float(unrealized_pnl),
         "Open Long Lots": len(open_long_lots),
         "Open Short Lots": len(open_short_lots)
     }
@@ -253,10 +283,12 @@ if selected_ticker:
             "Quantity",
             "Price",
             "Trade Notional",
+            "Gross Notional",
             "Running Position",
             "Avg Cost Basis",
             "Realized PnL (Trade)",
-            "Total Realized PnL"
+            "Total Realized PnL",
+            "Total Unrealized PnL"
         ]
 
         st.dataframe(
@@ -268,14 +300,9 @@ if selected_ticker:
 
         st.subheader("Summary")
 
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
 
-        col1.metric(
-            "Final Position",
-            smart_format(summary["Final Position"])
-        )
+        col1.metric("Final Position", smart_format(summary["Final Position"]))
+        col2.metric("Total Realized PnL", f"${smart_format(summary['Total Realized PnL'])}")
+        col3.metric("Unrealized PnL", f"${smart_format(summary['Final Unrealized PnL'])}")
 
-        col2.metric(
-            "Total Realized PnL",
-            f"${smart_format(summary['Total Realized PnL'])}"
-        )
