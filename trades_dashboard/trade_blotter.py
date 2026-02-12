@@ -170,7 +170,7 @@ def build_fifo_ledger(df):
         realized_pnl_total += realized_pnl
 
         # ==============================
-        # Unrealized PnL (mark to trade price)
+        # Unrealized PnL (marked to trade price)
         # ==============================
         unrealized_pnl = Decimal("0")
 
@@ -183,7 +183,7 @@ def build_fifo_ledger(df):
         total_pnl = realized_pnl_total + unrealized_pnl
         gross_notional = abs(running_position) * price
 
-        # Consistent rounding
+        # Rounding helper
         def r(x):
             return float(x.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
@@ -232,7 +232,15 @@ if selected_ticker:
         ledger_df, summary = build_fifo_ledger(df)
 
         st.subheader(f"Trade Ledger — {selected_ticker}")
-        st.dataframe(ledger_df, use_container_width=True)
+
+        numeric_cols = ledger_df.select_dtypes(include=["float64", "int64"]).columns
+
+        st.dataframe(
+            ledger_df.style.format(
+                {col: "{:,.2f}" for col in numeric_cols}
+            ),
+            use_container_width=True
+        )
 
         st.subheader("Summary")
 
@@ -242,6 +250,5 @@ if selected_ticker:
         col2.metric("Realized PnL", f"${summary['Total Realized PnL']:,.2f}")
         col3.metric("Unrealized PnL", f"${summary['Final Unrealized PnL']:,.2f}")
         col4.metric("Total PnL", f"${summary['Total PnL']:,.2f}")
-
 
 
