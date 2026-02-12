@@ -34,10 +34,10 @@ def check_password():
 if not check_password():
     st.stop()
 
+# ==========================================================
+# DATABASE CONFIG
+# ==========================================================
 
-# ==========================================================
-# DATABASE CONFIG (Secure via Streamlit Secrets)
-# ==========================================================
 DB_CONFIG = st.secrets["db"]
 
 def get_conn():
@@ -46,6 +46,7 @@ def get_conn():
 # ==========================================================
 # DATABASE HELPERS
 # ==========================================================
+
 def get_all_tickers():
     conn = get_conn()
     cursor = conn.cursor()
@@ -90,11 +91,14 @@ def load_trades_for_ticker(ticker):
     return pd.DataFrame(rows)
 
 # ==========================================================
-# FIFO ENGINE
+# CORRECT LONG + SHORT FIFO ENGINE
 # ==========================================================
+
 def build_fifo_ledger(df):
 
-    open_lots = []
+    open_long_lots = []
+    open_short_lots = []
+
     running_position = Decimal("0")
     realized_pnl_total = Decimal("0")
 
@@ -108,47 +112,80 @@ def build_fifo_ledger(df):
         trade_notional = qty * price
         realized_pnl = Decimal("0")
 
+        # ================================
         # BUY
+        # ================================
         if qty > 0:
-            open_lots.append({
-                "remaining_qty": qty,
-                "price": price
-            })
+
+            buy_qty = qty
+
+            # Close short first
+            while buy_qty > 0 and open_short_lots:
+                lot = open_short_lots[0]
+
+                matched_qty = min(lot["remaining_qty"], buy_qty)
+
+                # SHORT PnL
+                pnl = matched_qty * (lot["price"] - price)
+                realized_pnl += pnl
+
+                lot["remaining_qty"] -= matched_qty
+                buy_qty -= matched_qty
+
+                if lot["remaining_qty"] == 0:
+                    open_short_lots.pop(0)
+
+            # Open new long if remaining
+            if buy_qty > 0:
+                open_long_lots.append({
+                    "remaining_qty": buy_qty,
+                    "price": price
+                })
+
             running_position += qty
 
+        # ================================
         # SELL
+        # ================================
         else:
+
             sell_qty = abs(qty)
 
-            while sell_qty > 0 and open_lots:
-                lot = open_lots[0]
+            # Close long first
+            while sell_qty > 0 and open_long_lots:
+                lot = open_long_lots[0]
 
-                lot_qty = lot["remaining_qty"]
-                lot_price = lot["price"]
+                matched_qty = min(lot["remaining_qty"], sell_qty)
 
-                matched_qty = min(lot_qty, sell_qty)
-
-                pnl = matched_qty * (price - lot_price)
+                pnl = matched_qty * (price - lot["price"])
                 realized_pnl += pnl
 
                 lot["remaining_qty"] -= matched_qty
                 sell_qty -= matched_qty
 
                 if lot["remaining_qty"] == 0:
-                    open_lots.pop(0)
+                    open_long_lots.pop(0)
 
-            running_position += qty  # qty negative
+            # Open new short if remaining
+            if sell_qty > 0:
+                open_short_lots.append({
+                    "remaining_qty": sell_qty,
+                    "price": price
+                })
+
+            running_position += qty
 
         realized_pnl_total += realized_pnl
 
+        # Avg cost only meaningful for long inventory
         remaining_cost = sum(
             lot["remaining_qty"] * lot["price"]
-            for lot in open_lots
+            for lot in open_long_lots
         )
 
         avg_cost = (
             remaining_cost / running_position
-            if running_position != 0
+            if running_position > 0
             else Decimal("0")
         )
 
@@ -168,15 +205,16 @@ def build_fifo_ledger(df):
     summary = {
         "Final Position": float(running_position),
         "Total Realized PnL": float(realized_pnl_total),
-        "Remaining Open Lots": len(open_lots)
+        "Open Long Lots": len(open_long_lots),
+        "Open Short Lots": len(open_short_lots)
     }
 
     return ledger_df, summary
 
-
 # ==========================================================
 # SMART NUMBER FORMATTER
 # ==========================================================
+
 def smart_format(x):
     if pd.isna(x):
         return ""
@@ -190,10 +228,10 @@ def smart_format(x):
     else:
         return f"{x:,.2f}"
 
-
 # ==========================================================
 # STREAMLIT UI
 # ==========================================================
+
 st.set_page_config(layout="wide")
 st.title("📊 FIFO Trade Blotter Ledger")
 
@@ -241,5 +279,3 @@ if selected_ticker:
             "Total Realized PnL",
             f"${smart_format(summary['Total Realized PnL'])}"
         )
-
-
