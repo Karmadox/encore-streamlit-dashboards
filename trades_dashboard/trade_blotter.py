@@ -61,6 +61,7 @@ def get_all_tickers():
     conn.close()
     return [r[0] for r in rows]
 
+
 def load_trades_for_ticker(ticker):
     conn = get_conn()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -172,6 +173,24 @@ def build_fifo_ledger(df):
 
     return ledger_df, summary
 
+
+# ==========================================================
+# SMART NUMBER FORMATTER
+# ==========================================================
+def smart_format(x):
+    if pd.isna(x):
+        return ""
+    try:
+        x = float(x)
+    except:
+        return x
+
+    if x.is_integer():
+        return f"{x:,.0f}"
+    else:
+        return f"{x:,.2f}"
+
+
 # ==========================================================
 # STREAMLIT UI
 # ==========================================================
@@ -191,9 +210,36 @@ if selected_ticker:
         ledger_df, summary = build_fifo_ledger(df)
 
         st.subheader(f"Trade Ledger — {selected_ticker}")
-        st.dataframe(ledger_df, use_container_width=True)
+
+        numeric_cols = [
+            "Quantity",
+            "Price",
+            "Trade Notional",
+            "Running Position",
+            "Avg Cost Basis",
+            "Realized PnL (Trade)",
+            "Total Realized PnL"
+        ]
+
+        st.dataframe(
+            ledger_df.style.format(
+                {col: smart_format for col in numeric_cols}
+            ),
+            use_container_width=True
+        )
 
         st.subheader("Summary")
+
         col1, col2 = st.columns(2)
-        col1.metric("Final Position", summary["Final Position"])
-        col2.metric("Total Realized PnL", f"${summary['Total Realized PnL']:,.2f}")
+
+        col1.metric(
+            "Final Position",
+            smart_format(summary["Final Position"])
+        )
+
+        col2.metric(
+            "Total Realized PnL",
+            f"${smart_format(summary['Total Realized PnL'])}"
+        )
+
+
