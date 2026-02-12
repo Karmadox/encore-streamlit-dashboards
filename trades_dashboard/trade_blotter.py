@@ -166,4 +166,100 @@ def build_fifo_ledger(df):
         realized_pnl_total += realized_pnl
 
         # Unrealized
-        u
+        unrealized_pnl = Decimal("0")
+
+        for lot in open_long_lots:
+            unrealized_pnl += lot["remaining_qty"] * (price - lot["price"])
+
+        for lot in open_short_lots:
+            unrealized_pnl += lot["remaining_qty"] * (lot["price"] - price)
+
+        total_pnl = realized_pnl_total + unrealized_pnl
+        gross_notional = abs(running_position) * price
+
+        # Round internally to 2dp for accuracy
+        def r(x):
+            return float(x.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+        ledger_rows.append({
+            "Trade Date": row["trade_date"],
+            "Side": side_label,
+            "Quantity": r(qty),
+            "Price": r(price),
+            "Trade Notional": r(trade_notional),
+            "Gross Notional": r(gross_notional),
+            "Running Position": r(running_position),
+            "Realized PnL (Trade)": r(realized_pnl),
+            "Total Realized PnL": r(realized_pnl_total),
+            "Total Unrealized PnL": r(unrealized_pnl),
+            "Total PnL (Realized + Unrealized)": r(total_pnl)
+        })
+
+    ledger_df = pd.DataFrame(ledger_rows)
+
+    summary = {
+        "Final Position": ledger_df["Running Position"].iloc[-1],
+        "Total Realized PnL": ledger_df["Total Realized PnL"].iloc[-1],
+        "Final Unrealized PnL": ledger_df["Total Unrealized PnL"].iloc[-1],
+        "Total PnL": ledger_df["Total PnL (Realized + Unrealized)"].iloc[-1]
+    }
+
+    return ledger_df, summary
+
+# ==========================================================
+# SMART COLUMN FORMATTER
+# ==========================================================
+
+def build_column_format_dict(df):
+
+    format_dict = {}
+
+    for col in df.select_dtypes(include=["float64", "int64"]).columns:
+
+        series = df[col]
+
+        # Check if all values are whole numbers
+        if (series % 1 == 0).all():
+            format_dict[col] = "{:,.0f}"
+        else:
+            format_dict[col] = "{:,.2f}"
+
+    return format_dict
+
+# ==========================================================
+# STREAMLIT UI
+# ==========================================================
+
+st.set_page_config(layout="wide")
+st.title("📊 FIFO Trade Blotter Ledger")
+
+tickers = get_all_tickers()
+selected_ticker = st.selectbox("Select Ticker", tickers)
+
+if selected_ticker:
+
+    df = load_trades_for_ticker(selected_ticker)
+
+    if df.empty:
+        st.warning("No trades found.")
+    else:
+        ledger_df, summary = build_fifo_ledger(df)
+
+        st.subheader(f"Trade Ledger — {selected_ticker}")
+
+        format_dict = build_column_format_dict(ledger_df)
+
+        st.dataframe(
+            ledger_df.style.format(format_dict),
+            use_container_width=True
+        )
+
+        st.subheader("Summary")
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        col1.metric("Final Position", f"{summary['Final Position']:,.0f}" if summary['Final Position'] % 1 == 0 else f"{summary['Final Position']:,.2f}")
+        col2.metric("Realized PnL", f"${summary['Total Realized PnL']:,.2f}")
+        col3.metric("Unrealized PnL", f"${summary['Final Unrealized PnL']:,.2f}")
+        col4.metric("Total PnL", f"${summary['Total PnL']:,.2f}")
+
