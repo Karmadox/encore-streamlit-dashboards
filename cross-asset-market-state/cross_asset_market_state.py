@@ -1,314 +1,169 @@
 import streamlit as st
-import pandas as pd
 import psycopg2
-from datetime import date
+import pandas as pd
 
-# -------------------------------------------------
-# SIMPLE PASSWORD AUTH
-# -------------------------------------------------
+# =====================================
+# PAGE CONFIG
+# =====================================
+
+st.set_page_config(
+    page_title="Encore Cross Asset Market State Dashboard",
+    layout="wide"
+)
+
+# =====================================
+# SIMPLE PASSWORD PROTECTION
+# =====================================
 
 def check_password():
-
     def password_entered():
-        if st.session_state["password"] == st.secrets["auth"]["password"]:
-            st.session_state["authenticated"] = True
+        if st.session_state["password"] == st.secrets["dashboard_password"]:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]
         else:
-            st.session_state["authenticated"] = False
+            st.session_state["password_correct"] = False
 
-    if "authenticated" not in st.session_state:
-        st.text_input("Enter Password", type="password", key="password")
-        st.button("Login", on_click=password_entered)
+    if "password_correct" not in st.session_state:
+        st.text_input(
+            "Enter Password",
+            type="password",
+            on_change=password_entered,
+            key="password",
+        )
         return False
-
-    elif not st.session_state["authenticated"]:
-        st.text_input("Enter Password", type="password", key="password")
-        st.button("Login", on_click=password_entered)
+    elif not st.session_state["password_correct"]:
+        st.text_input(
+            "Enter Password",
+            type="password",
+            on_change=password_entered,
+            key="password",
+        )
         st.error("Incorrect password")
         return False
-
     else:
         return True
-
 
 if not check_password():
     st.stop()
 
-# --------------------------------------------------
-# PAGE CONFIG
-# --------------------------------------------------
+# =====================================
+# DATABASE CONNECTION
+# =====================================
 
-st.set_page_config(
-    page_title="Nasdaq-100 Market State",
-    layout="wide",
-)
+@st.cache_data(ttl=600)
+def load_data():
 
-# --------------------------------------------------
-# DB CONFIG
-# --------------------------------------------------
+    conn = psycopg2.connect(
+        dbname=st.secrets["db"]["dbname"],
+        user=st.secrets["db"]["user"],
+        password=st.secrets["db"]["password"],
+        host=st.secrets["db"]["host"],
+        port=st.secrets["db"]["port"],
+    )
 
-DB_CONFIG = st.secrets["db"]
-
-def get_conn():
-    return psycopg2.connect(**DB_CONFIG)
-
-# --------------------------------------------------
-# DATA LOADERS
-# --------------------------------------------------
-
-@st.cache_data(ttl=300)
-def load_latest_snapshot_date():
-    sql = """
-        SELECT MAX(snapshot_date) AS snapshot_date
-        FROM encoredb.ndx_market_snapshot
+    query = """
+        SELECT *
+        FROM encoredb.v_market_state_cohort_summary
+        ORDER BY avg_1d_pct DESC;
     """
-    with get_conn() as conn:
-        return pd.read_sql(sql, conn)["snapshot_date"].iloc[0]
 
-@st.cache_data(ttl=300)
-def load_market_state(snapshot_date):
-    sql = """
-        SELECT
-            snapshot_date,
-            ticker,
-            sector_name,
-            cohort_name,
-            role_bucket,
-            index_rank,
-            index_weight_pct,
-            cumulative_weight_pct,
-            last_price,
-            pct_change_1d,
-            pct_change_5d,
-            pct_change_1m,
-            pct_change_ytd,
-            pct_from_52w_high,
-            best_target_price,
-            pct_to_best_target,
-            analyst_count,
-            best_analyst_rating,
-            next_earnings_date,
-            days_to_earnings
-        FROM encoredb.v_ndx_canonical_market_state_enriched
-        WHERE snapshot_date = %s
-        ORDER BY index_rank
-    """
-    with get_conn() as conn:
-        return pd.read_sql(sql, conn, params=(snapshot_date,))
+    df = pd.read_sql(query, conn)
+    conn.close()
+    return df
 
-# --------------------------------------------------
-# LOAD DATA
-# --------------------------------------------------
+df = load_data()
 
-snapshot_date = load_latest_snapshot_date()
-df = load_market_state(snapshot_date)
+# =====================================
+# COMMENTARY LOGIC
+# =====================================
 
-# --------------------------------------------------
+def interpret_row(row):
+    comments = []
+
+    if row["avg_1d_pct"] > 1:
+        comments.append("Strong short-term momentum")
+    elif row["avg_1d_pct"] < -1:
+        comments.append("Short-term weakness")
+
+    if row["avg_1m_pct"] > 3:
+        comments.append("Positive medium-term trend")
+    elif row["avg_1m_pct"] < -3:
+        comments.append("Medium-term drawdown")
+
+    if row["avg_pct_from_52w_high"] < -20:
+        comments.append("Deeply below 52W highs")
+
+    if row["pct_up_1d"] < 40:
+        comments.append("Weak breadth")
+    elif row["pct_up_1d"] > 60:
+        comments.append("Broad participation")
+
+    return " | ".join(comments)
+
+df["Commentary"] = df.apply(interpret_row, axis=1)
+
+# =====================================
 # HEADER
-# --------------------------------------------------
+# =====================================
 
-st.title("📈 Nasdaq-100 — Market State")
-st.caption(f"As of end of day: {snapshot_date.strftime('%d %b %Y')}")
+st.title("Encore Earnings Regime Monitor")
 
-# --------------------------------------------------
-# HOW TO READ THIS CHART
-# --------------------------------------------------
+st.markdown("""
+This dashboard groups instruments by earnings sensitivity cohort and tracks
+short-term momentum, medium-term trend, positioning compression, and breadth.
 
-with st.expander("ℹ️ How to read this chart", expanded=False):
-    st.markdown("""
-**What this dashboard shows**
+**How to read:**
 
-A point-in-time view of the Nasdaq-100, combining:
-- index structure (weights & ranks)
-- market positioning (price, momentum, distance from highs)
-- expectations (analyst targets & ratings)
-- near-term risk (earnings timing)
-
-**Key fields**
-
-- **Last Price**  
-  End-of-day price for the snapshot date.
-
-- **% Change (1D / 5D / 1M / YTD)**  
-  Performance over different horizons — distinguishes flow vs structure.
-
-- **% from 52W High**  
-  Near zero = extended; deeply negative = lagging / potential mean reversion.
-
-- **% to Best Target**  
-  Difference between price and most optimistic analyst target.  
-  + = upside expected, − = expectations risk.
-
-- **Analyst Rating**  
-  Bloomberg consensus (1 = Strong Buy, 5 = Sell).
-
-- **Days to Earnings**  
-  Time to next expected earnings report.
+- 1D = positioning / short-term flows  
+- 1M = earnings revision trend  
+- 3M = structural rotation  
+- % from 52W high = positioning compression  
+- Breadth = percentage of instruments positive on the day  
 """)
 
-st.divider()
+# =====================================
+# TABLE DISPLAY
+# =====================================
 
-# --------------------------------------------------
-# GLOBAL SUMMARY METRICS
-# --------------------------------------------------
-
-top5_weight = df.loc[df["index_rank"] <= 5, "index_weight_pct"].sum()
-top10_weight = df.loc[df["index_rank"] <= 10, "index_weight_pct"].sum()
-pct_near_high = (df["pct_from_52w_high"] >= -10).mean() * 100
-earnings_7d = df["days_to_earnings"].between(0, 7).sum()
-earnings_14d = df["days_to_earnings"].between(0, 14).sum()
-
-# --------------------------------------------------
-# FILTERS
-# --------------------------------------------------
-
-col_f1, col_f2, col_f3 = st.columns(3)
-
-with col_f1:
-    role_filter = st.multiselect(
-        "Role bucket",
-        sorted(df["role_bucket"].dropna().unique()),
-        default=[]
-    )
-
-with col_f2:
-    max_rank = st.slider(
-        "Show top N index constituents (by weight)",
-        min_value=1,
-        max_value=101,
-        value=101,
-        help="Filters to the top N Nasdaq-100 constituents by index weight."
-    )
-
-with col_f3:
-    earnings_filter = st.checkbox("Only instruments with earnings ≤ 14 days")
-
-filtered = df.copy()
-
-if role_filter:
-    filtered = filtered[filtered["role_bucket"].isin(role_filter)]
-
-filtered = filtered[filtered["index_rank"] <= max_rank]
-
-if earnings_filter:
-    filtered = filtered[filtered["days_to_earnings"].between(0, 14)]
-
-# --------------------------------------------------
-# FILTER-AWARE METRICS
-# --------------------------------------------------
-
-selected_weight = filtered["index_weight_pct"].sum()
-
-c1, c2, c3, c4, c5, c6 = st.columns(6)
-
-c1.metric("Top 5 weight", f"{top5_weight:.1f}%")
-c2.metric("Top 10 weight", f"{top10_weight:.1f}%")
-c3.metric(
-    "Selected weight",
-    f"{selected_weight:.1f}%",
-    help="Total Nasdaq-100 index weight of the currently selected instruments"
-)
-c4.metric("% within 10% of 52W high", f"{pct_near_high:.0f}%")
-c5.metric("Earnings ≤ 7 days", earnings_7d)
-c6.metric("Earnings ≤ 14 days", earnings_14d)
-
-st.divider()
-
-# --------------------------------------------------
-# FORMAT HELPERS
-# --------------------------------------------------
-
-def format_signed_pct(x):
-    if pd.isna(x):
-        return ""
-    return f"{x:+.1f}%"
-
-def color_signed_pct(x):
-    if pd.isna(x):
-        return ""
-    if x > 0:
-        return "color: #166534;"
-    if x < 0:
-        return "color: #991b1b;"
-    return ""
-
-# --------------------------------------------------
-# MAIN TABLE
-# --------------------------------------------------
-
-st.subheader("📋 Canonical Market State")
-
-display_cols = [
-    "ticker",
-    "sector_name",
-    "cohort_name",
-    "role_bucket",
-    "index_rank",
-    "index_weight_pct",
-    "last_price",
-    "pct_change_1d",
-    "pct_change_5d",
-    "pct_change_1m",
-    "pct_change_ytd",
-    "pct_from_52w_high",
-    "pct_to_best_target",
-    "analyst_count",
-    "best_analyst_rating",
-    "days_to_earnings",
-]
-
-styled = (
-    filtered[display_cols]
-    .style
-    .format({
-        "index_weight_pct": "{:.3f}",
-        "last_price": "{:.2f}",
-        "pct_change_1d": "{:.2f}%",
-        "pct_change_5d": "{:.2f}%",
-        "pct_change_1m": "{:.2f}%",
-        "pct_change_ytd": "{:.2f}%",
-        "pct_from_52w_high": "{:.2f}%",
-        "pct_to_best_target": format_signed_pct,
-    })
-    .applymap(color_signed_pct, subset=["pct_to_best_target"])
-)
-
-st.dataframe(styled, use_container_width=True)
-
-# --------------------------------------------------
-# ROLE-LEVEL AGGREGATION
-# --------------------------------------------------
-
-st.divider()
-st.subheader("🧩 Role-Level Summary")
-
-role_summary = (
-    df
-    .groupby("role_bucket", dropna=False)
-    .agg(
-        total_weight=("index_weight_pct", "sum"),
-        avg_pct_from_high=("pct_from_52w_high", "mean"),
-        pct_near_high=("pct_from_52w_high", lambda x: (x >= -10).mean() * 100),
-        earnings_14d=("days_to_earnings", lambda x: x.between(0, 14).sum()),
-        median_upside=("pct_to_best_target", "median")
-    )
-    .reset_index()
-    .sort_values("total_weight", ascending=False)
-)
+st.subheader("Cohort Performance Summary")
 
 st.dataframe(
-    role_summary.style.format({
-        "total_weight": "{:.2f}%",
-        "avg_pct_from_high": "{:.2f}%",
-        "pct_near_high": "{:.0f}%",
-        "median_upside": format_signed_pct,
-    }),
-    use_container_width=True
+    df,
+    use_container_width=True,
 )
 
-# --------------------------------------------------
+# =====================================
+# BAR CHART (1M Momentum)
+# =====================================
+
+st.subheader("Medium-Term Trend (1M %)")
+
+chart_df = df.set_index("earnings_cohort")["avg_1m_pct"]
+
+st.bar_chart(chart_df)
+
+# =====================================
+# COHORT DEFINITIONS
+# =====================================
+
+with st.expander("Cohort Construction Methodology"):
+
+    st.markdown("""
+    Cohorts group instruments by dominant earnings driver or macro sensitivity.
+
+    - **growth_equity** → duration-sensitive large cap growth
+    - **enterprise_software** → capex / SaaS earnings beta
+    - **semiconductors** → AI & hardware cycle
+    - **equal_weight** → domestic breadth proxy
+    - **defensive_asset** → gold / safe-haven
+    - **stress** → volatility regime indicator
+    - **real_economy** → commodity cyclicals
+    - **macro** → dollar liquidity proxy
+    - **rates** → real rate expectations
+    """)
+
+# =====================================
 # FOOTER
-# --------------------------------------------------
+# =====================================
 
-st.caption(
-    f"Encore Analytics • Nasdaq-100 Market State • Generated {date.today().isoformat()}"
-)
+st.caption("Data Source: Bloomberg EOD | Updated daily at 4:30PM CST")
