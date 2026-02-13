@@ -136,7 +136,7 @@ def load_security_master_issues():
         return pd.read_sql(sql, conn)
 
 # --------------------------------------------------
-# TASK MONITORING LOADER
+# TASK MONITORING LOADER (FIXED TIMEZONE SAFE)
 # --------------------------------------------------
 
 @st.cache_data(ttl=60)
@@ -160,10 +160,11 @@ def load_task_status():
           .reset_index()
     )
 
-    latest["run_start"] = pd.to_datetime(latest["run_start"])
-    latest["run_end"] = pd.to_datetime(latest["run_end"])
+    # 🔒 Force UTC-aware timestamps
+    latest["run_start"] = pd.to_datetime(latest["run_start"], utc=True)
+    latest["run_end"] = pd.to_datetime(latest["run_end"], utc=True)
 
-    now = pd.Timestamp.utcnow()
+    now = pd.Timestamp.now(tz="UTC")
 
     latest["minutes_since_last_run"] = (
         (now - latest["run_start"]).dt.total_seconds() / 60
@@ -217,7 +218,6 @@ with tabs[1]:
     st.subheader("🏭 Security Master Explorer")
 
     sectors = load_sectors()
-
     sel_sector = st.selectbox("Select Sector", sectors["sector_name"])
 
     sector_id = sectors.loc[
