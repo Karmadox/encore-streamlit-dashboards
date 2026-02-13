@@ -136,17 +136,19 @@ def load_security_master_issues():
         return pd.read_sql(sql, conn)
 
 # --------------------------------------------------
-# TASK MONITORING LOADER (FIXED TIMEZONE SAFE)
+# TASK MONITORING LOADER (PROPER TIMEZONE SAFE)
 # --------------------------------------------------
 
 @st.cache_data(ttl=60)
 def load_task_status():
+
     sql = """
         SELECT *
         FROM encoredb.task_execution_log
         WHERE run_start >= NOW() - INTERVAL '1 day'
         ORDER BY run_start DESC
     """
+
     with get_conn() as conn:
         df = pd.read_sql(sql, conn)
 
@@ -160,9 +162,16 @@ def load_task_status():
           .reset_index()
     )
 
-    # 🔒 Force UTC-aware timestamps
-    latest["run_start"] = pd.to_datetime(latest["run_start"], utc=True)
-    latest["run_end"] = pd.to_datetime(latest["run_end"], utc=True)
+    # Parse timestamps WITHOUT forcing timezone
+    latest["run_start"] = pd.to_datetime(latest["run_start"], errors="coerce")
+    latest["run_end"] = pd.to_datetime(latest["run_end"], errors="coerce")
+
+    # If timestamps are naive, assume they are UTC
+    if latest["run_start"].dt.tz is None:
+        latest["run_start"] = latest["run_start"].dt.tz_localize("UTC")
+
+    if latest["run_end"].dt.tz is None:
+        latest["run_end"] = latest["run_end"].dt.tz_localize("UTC")
 
     now = pd.Timestamp.now(tz="UTC")
 
@@ -170,7 +179,7 @@ def load_task_status():
         (now - latest["run_start"]).dt.total_seconds() / 60
     ).round(1)
 
-    # Health logic (3-min job rule)
+    # Health logic (3-min schedule rule)
     def health(row):
         if row["status"] == "FAILED":
             return "🔴 FAILED"
@@ -275,7 +284,7 @@ with tabs[2]:
             """
             **Health Definitions**
             - 🟢 HEALTHY → Ran successfully within expected window  
-            - 🟠 STALE → Missed expected schedule  
+            - 🟠 STALE → Missed expected schedule (>6 min for 3-min job)  
             - 🔴 FAILED → Last execution failed  
             - 🟡 RUNNING → Currently executing  
             """
