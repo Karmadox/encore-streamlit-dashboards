@@ -136,7 +136,7 @@ def load_security_master_issues():
 
 # --------------------------------------------------
 # ENTERPRISE TASK MONITORING
-# Windows = source of truth
+# Windows = Source of Truth
 # --------------------------------------------------
 
 @st.cache_data(ttl=60)
@@ -144,16 +144,15 @@ def load_task_status():
 
     sql = """
         WITH latest_exec AS (
-            SELECT *
-            FROM (
-                SELECT *,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY task_name
-                           ORDER BY run_start DESC
-                       ) AS rn
-                FROM encoredb.task_execution_log
-            ) t
-            WHERE rn = 1
+            SELECT DISTINCT ON (task_name)
+                task_name,
+                status,
+                run_start,
+                run_end,
+                runtime_seconds,
+                rows_processed
+            FROM encoredb.task_execution_log
+            ORDER BY task_name, run_start DESC
         )
 
         SELECT
@@ -167,12 +166,10 @@ def load_task_status():
             e.run_end,
             e.runtime_seconds,
             e.rows_processed
-
         FROM encoredb.task_scheduler_registry r
         LEFT JOIN latest_exec e
             ON r.task_name = e.task_name
-
-        ORDER BY r.task_name
+        ORDER BY r.task_name;
     """
 
     with get_conn() as conn:
@@ -201,28 +198,28 @@ def load_task_status():
 
     def health(row):
 
-        # 1️⃣ Disabled in Windows
-        if row["enabled"] is False:
+        # Disabled
+        if row["enabled"] == False:
             return "⚪ DISABLED"
 
-        # 2️⃣ Windows-level failure
+        # Windows-level failure
         if row["last_task_result"] not in (0, None):
             return "🔴 WINDOWS FAILED"
 
-        # 3️⃣ Script-level failure
+        # Script-level failure
         if row["status"] == "FAILED":
             return "🔴 SCRIPT FAILED"
 
-        # 4️⃣ Currently running
+        # Running
         if row["status"] == "RUNNING":
             return "🟡 RUNNING"
 
-        # 5️⃣ Missed schedule
+        # Missed schedule
         if pd.notnull(row["next_run_time"]):
             if now > row["next_run_time"] + pd.Timedelta(minutes=2):
                 return "🟠 MISSED SCHEDULE"
 
-        # 6️⃣ No script logging but Windows ran successfully
+        # Windows ran but script not logging
         if pd.isnull(row["run_start"]) and pd.notnull(row["last_run_time"]):
             return "🟢 HEALTHY (WINDOWS)"
 
@@ -230,6 +227,7 @@ def load_task_status():
 
     df["health"] = df.apply(health, axis=1)
 
+    # Safe minutes calculation
     df["minutes_since_last_run"] = (
         (now - df["run_start"]).dt.total_seconds() / 60
     ).round(1)
@@ -248,11 +246,8 @@ tabs = st.tabs([
     "🖥 Task Monitoring"
 ])
 
-# ==================================================
-# TAB 1 — SECURITY MASTER
-# ==================================================
+# TAB 1
 with tabs[0]:
-
     st.subheader("🚨 Instruments Requiring Attention")
     issues = load_security_master_issues()
 
@@ -262,9 +257,7 @@ with tabs[0]:
         st.warning(f"⚠ {len(issues)} instruments require attention")
         st.dataframe(issues, use_container_width=True)
 
-# ==================================================
-# TAB 2 — EXPLORER
-# ==================================================
+# TAB 2
 with tabs[1]:
 
     st.subheader("🏭 Security Master Explorer")
@@ -295,9 +288,7 @@ with tabs[1]:
         else:
             st.dataframe(instruments, use_container_width=True)
 
-# ==================================================
-# TAB 3 — TASK MONITORING
-# ==================================================
+# TAB 3
 with tabs[2]:
 
     st.subheader("🖥 Windows Task Monitoring")
@@ -330,20 +321,3 @@ with tabs[2]:
         st.markdown(
             """
             **Health Definitions**
-            - 🟢 HEALTHY → Windows + Script OK  
-            - 🟢 HEALTHY (WINDOWS) → Windows ran, script not logging  
-            - 🟠 MISSED SCHEDULE → Now past next scheduled run  
-            - 🔴 WINDOWS FAILED → Task Scheduler failure  
-            - 🔴 SCRIPT FAILED → Python execution failure  
-            - 🟡 RUNNING → Currently executing  
-            - ⚪ DISABLED → Disabled in Windows Task Scheduler  
-            """
-        )
-
-# --------------------------------------------------
-# FOOTER
-# --------------------------------------------------
-
-st.caption(
-    f"Data as of {date.today().isoformat()} • Encore Internal Monitoring"
-)
