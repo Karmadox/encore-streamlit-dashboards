@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import psycopg2
-from datetime import date
+from datetime import date, datetime
 import streamlit_autorefresh
 
 # -------------------------------------------------
@@ -136,7 +136,7 @@ def load_security_master_issues():
         return pd.read_sql(sql, conn)
 
 # --------------------------------------------------
-# TASK MONITORING LOADER (PROPER TIMEZONE SAFE)
+# TASK MONITORING LOADER (FIXED – NO TIMEZONE LOGIC)
 # --------------------------------------------------
 
 @st.cache_data(ttl=60)
@@ -155,6 +155,7 @@ def load_task_status():
     if df.empty:
         return df
 
+    # Get latest run per task
     latest = (
         df.sort_values("run_start", ascending=False)
           .groupby("task_name")
@@ -162,24 +163,18 @@ def load_task_status():
           .reset_index()
     )
 
-    # Parse timestamps WITHOUT forcing timezone
+    # Parse timestamps as naive (DO NOT attach timezone)
     latest["run_start"] = pd.to_datetime(latest["run_start"], errors="coerce")
     latest["run_end"] = pd.to_datetime(latest["run_end"], errors="coerce")
 
-    # If timestamps are naive, assume they are UTC
-    if latest["run_start"].dt.tz is None:
-        latest["run_start"] = latest["run_start"].dt.tz_localize("UTC")
-
-    if latest["run_end"].dt.tz is None:
-        latest["run_end"] = latest["run_end"].dt.tz_localize("UTC")
-
-    now = pd.Timestamp.now(tz="UTC")
+    # Use naive local time for comparison
+    now = datetime.now()
 
     latest["minutes_since_last_run"] = (
         (now - latest["run_start"]).dt.total_seconds() / 60
     ).round(1)
 
-    # Health logic (3-min schedule rule)
+    # Health logic
     def health(row):
         if row["status"] == "FAILED":
             return "🔴 FAILED"
@@ -206,7 +201,7 @@ tabs = st.tabs([
 ])
 
 # ==================================================
-# TAB 1 — SECURITY MASTER ISSUES
+# TAB 1 — SECURITY MASTER
 # ==================================================
 with tabs[0]:
 
@@ -220,7 +215,7 @@ with tabs[0]:
         st.dataframe(issues, use_container_width=True)
 
 # ==================================================
-# TAB 2 — SECURITY MASTER EXPLORER
+# TAB 2 — EXPLORER
 # ==================================================
 with tabs[1]:
 
@@ -284,7 +279,7 @@ with tabs[2]:
             """
             **Health Definitions**
             - 🟢 HEALTHY → Ran successfully within expected window  
-            - 🟠 STALE → Missed expected schedule (>6 min for 3-min job)  
+            - 🟠 STALE → Missed expected schedule (>6 minutes for 3-min job)  
             - 🔴 FAILED → Last execution failed  
             - 🟡 RUNNING → Currently executing  
             """
@@ -297,3 +292,4 @@ with tabs[2]:
 st.caption(
     f"Data as of {date.today().isoformat()} • Encore Internal Monitoring"
 )
+
