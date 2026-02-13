@@ -1,4 +1,4 @@
-it still does not work, says 360 minutes again, please update full script with necessary changes import streamlit as st
+import streamlit as st
 import pandas as pd
 import psycopg2
 from datetime import date, datetime
