@@ -198,28 +198,32 @@ def load_task_status():
 
     def health(row):
 
-        # Disabled
         if row["enabled"] == False:
             return "⚪ DISABLED"
 
-        # Windows-level failure
         if row["last_task_result"] not in (0, None):
             return "🔴 WINDOWS FAILED"
 
-        # Script-level failure
         if row["status"] == "FAILED":
             return "🔴 SCRIPT FAILED"
 
-        # Running
         if row["status"] == "RUNNING":
             return "🟡 RUNNING"
 
-        # Missed schedule
-        if pd.notnull(row["next_run_time"]):
-            if now > row["next_run_time"] + pd.Timedelta(minutes=2):
+        now = pd.Timestamp.utcnow()
+
+        # Determine last activity time
+        last_activity = row["run_start"] if pd.notnull(row["run_start"]) else row["last_run_time"]
+
+        # Only check schedule drift if we have next_run_time
+        if pd.notnull(row["next_run_time"]) and pd.notnull(last_activity):
+
+            # If now is past next scheduled run AND
+            # last activity is older than that scheduled run
+            if now > row["next_run_time"] + pd.Timedelta(minutes=2) \
+               and last_activity < row["next_run_time"]:
                 return "🟠 MISSED SCHEDULE"
 
-        # Windows ran but script not logging
         if pd.isnull(row["run_start"]) and pd.notnull(row["last_run_time"]):
             return "🟢 HEALTHY (WINDOWS)"
 
@@ -233,7 +237,7 @@ def load_task_status():
     ).round(1)
 
     return df
-
+        
 # --------------------------------------------------
 # UI
 # --------------------------------------------------
@@ -338,4 +342,3 @@ with tabs[2]:
 st.caption(
     f"Data as of {date.today().isoformat()} • Encore Internal Monitoring"
 )
-
