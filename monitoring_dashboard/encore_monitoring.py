@@ -143,10 +143,37 @@ def load_security_master_issues():
 def load_task_status():
 
     sql = """
-        SELECT *
-        FROM encoredb.task_execution_log
-        WHERE run_start >= NOW() - INTERVAL '1 day'
-        ORDER BY run_start DESC
+        WITH latest_exec AS (
+            SELECT *
+            FROM (
+                SELECT *,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY task_name
+                           ORDER BY run_start DESC
+                       ) AS rn
+                FROM encoredb.task_execution_log
+            ) t
+            WHERE rn = 1
+        )
+
+        SELECT
+            r.task_name,
+            r.enabled,
+            r.last_run_time,
+            r.next_run_time,
+            r.last_task_result,
+
+            e.status,
+            e.run_start,
+            e.run_end,
+            e.runtime_seconds,
+            e.rows_processed
+
+        FROM encoredb.task_scheduler_registry r
+        LEFT JOIN latest_exec e
+            ON r.task_name = e.task_name
+
+        ORDER BY r.task_name
     """
 
     with get_conn() as conn:
@@ -155,52 +182,53 @@ def load_task_status():
     if df.empty:
         return df
 
-    # Latest run per task
-    latest = (
-        df.sort_values("run_start", ascending=False)
-          .groupby("task_name")
-          .first()
-          .reset_index()
-    )
+    # ----------------------------
+    # Parse timestamps (CST → UTC)
+    # ----------------------------
 
-    # Parse timestamps (naive)
-    latest["run_start"] = pd.to_datetime(latest["run_start"], errors="coerce")
-    latest["run_end"] = pd.to_datetime(latest["run_end"], errors="coerce")
+    for col in ["run_start", "run_end", "last_run_time", "next_run_time"]:
+        df[col] = pd.to_datetime(df[col], errors="coerce")
+        df[col] = (
+            df[col]
+            .dt.tz_localize("America/Chicago", nonexistent="NaT", ambiguous="NaT")
+            .dt.tz_convert("UTC")
+        )
 
-    # 🔒 Tell pandas these timestamps are CST
-    latest["run_start"] = (
-        latest["run_start"]
-        .dt.tz_localize("America/Chicago")
-        .dt.tz_convert("UTC")
-    )
-
-    latest["run_end"] = (
-        latest["run_end"]
-        .dt.tz_localize("America/Chicago")
-        .dt.tz_convert("UTC")
-    )
-
-    # Use true UTC now
     now = pd.Timestamp.utcnow()
 
-    latest["minutes_since_last_run"] = (
-        (now - latest["run_start"]).dt.total_seconds() / 60
-    ).round(1)
+    # ----------------------------
+    # Health Logic (NO HARDCODING)
+    # ----------------------------
 
-    # Health logic (3-minute job rule)
     def health(row):
+
+        if not row["enabled"]:
+            return "⚪ DISABLED"
+
+        if row["last_task_result"] not in (0, None):
+            return "🔴 WINDOWS FAILED"
+
         if row["status"] == "FAILED":
-            return "🔴 FAILED"
+            return "🔴 SCRIPT FAILED"
+
         if row["status"] == "RUNNING":
             return "🟡 RUNNING"
-        if row["minutes_since_last_run"] > 6:
-            return "🟠 STALE"
+
+        # Check schedule miss
+        if pd.notnull(row["next_run_time"]):
+            if now > row["next_run_time"] + pd.Timedelta(minutes=2):
+                return "🟠 MISSED SCHEDULE"
+
         return "🟢 HEALTHY"
 
-    latest["health"] = latest.apply(health, axis=1)
+    df["health"] = df.apply(health, axis=1)
 
-    return latest
+    # Optional: minutes since last run (for display only)
+    df["minutes_since_last_run"] = (
+        (now - df["run_start"]).dt.total_seconds() / 60
+    ).round(1)
 
+    return df
 
 # --------------------------------------------------
 # UI
