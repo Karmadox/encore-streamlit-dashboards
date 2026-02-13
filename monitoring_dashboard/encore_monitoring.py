@@ -321,3 +321,21 @@ with tabs[2]:
         st.markdown(
             """
             **Health Definitions**
+            - 🟢 HEALTHY → Windows + Script OK  
+            - 🟢 HEALTHY (WINDOWS) → Windows ran, script not logging  
+            - 🟠 MISSED SCHEDULE → Now past next scheduled run  
+            - 🔴 WINDOWS FAILED → Task Scheduler failure  
+            - 🔴 SCRIPT FAILED → Python execution failure  
+            - 🟡 RUNNING → Currently executing  
+            - ⚪ DISABLED → Disabled in Windows Task Scheduler  
+            """
+        )
+
+# --------------------------------------------------
+# FOOTER
+# --------------------------------------------------
+
+st.caption(
+    f"Data as of {date.today().isoformat()} • Encore Internal Monitoring"
+)
+
