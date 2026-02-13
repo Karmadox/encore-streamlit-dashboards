@@ -60,6 +60,84 @@ def sql_param(x):
     return x
 
 # --------------------------------------------------
+# DATA LOADERS – SECURITY MASTER
+# --------------------------------------------------
+
+@st.cache_data(ttl=300)
+def load_sectors():
+    sql = """
+        SELECT sector_id, sector_name
+        FROM encoredb.sectors
+        ORDER BY sector_name
+    """
+    with get_conn() as conn:
+        return pd.read_sql(sql, conn)
+
+
+@st.cache_data(ttl=300)
+def load_cohorts(sector_id):
+    sql = """
+        SELECT cohort_id, cohort_name
+        FROM encoredb.cohorts
+        WHERE sector_id = %s
+        ORDER BY cohort_name
+    """
+    with get_conn() as conn:
+        return pd.read_sql(sql, conn, params=(sql_param(sector_id),))
+
+
+@st.cache_data(ttl=300)
+def load_instruments_for_cohort(cohort_id):
+    sql = """
+        SELECT
+            i.ticker,
+            i.name,
+            w.weight_pct,
+            w.is_primary,
+            w.effective_date,
+            w.source
+        FROM encoredb.instrument_cohort_weights w
+        JOIN encoredb.instruments i
+          ON i.instrument_id = w.instrument_id
+        WHERE w.cohort_id = %s
+          AND w.effective_date = (
+              SELECT MAX(w2.effective_date)
+              FROM encoredb.instrument_cohort_weights w2
+              WHERE w2.instrument_id = w.instrument_id
+                AND w2.cohort_id = w.cohort_id
+          )
+        ORDER BY w.is_primary DESC, w.weight_pct DESC, i.ticker
+    """
+    with get_conn() as conn:
+        return pd.read_sql(sql, conn, params=(sql_param(cohort_id),))
+
+
+@st.cache_data(ttl=300)
+def load_security_master_issues():
+    sql = """
+        WITH latest_positions AS (
+            SELECT *
+            FROM encoredb.positions_eod_snapshot
+            WHERE snapshot_date = (
+                SELECT MAX(snapshot_date)
+                FROM encoredb.positions_eod_snapshot
+            )
+        )
+        SELECT i.ticker, i.name
+        FROM latest_positions p
+        JOIN encoredb.instruments i
+          ON i.instrument_id = p.instrument_id
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM encoredb.instrument_cohort_weights w
+            WHERE w.instrument_id = p.instrument_id
+        )
+        ORDER BY i.ticker
+    """
+    with get_conn() as conn:
+        return pd.read_sql(sql, conn)
+
+# --------------------------------------------------
 # ENTERPRISE TASK MONITORING
 # --------------------------------------------------
 
@@ -102,10 +180,7 @@ def load_task_status():
     if df.empty:
         return df
 
-    # ---------------------------------------
-    # Convert CST timestamps → UTC
-    # ---------------------------------------
-
+    # Convert CST → UTC
     for col in ["run_start", "run_end", "last_run_time", "next_run_time"]:
         df[col] = pd.to_datetime(df[col], errors="coerce")
         df[col] = (
@@ -116,35 +191,26 @@ def load_task_status():
 
     now = pd.Timestamp.utcnow()
 
-    # ---------------------------------------
-    # Enterprise Health Logic
-    # ---------------------------------------
-
     def health(row):
 
-        # Disabled
         if row["enabled"] == False:
             return "⚪ DISABLED"
 
-        # Windows failure
         if row["last_task_result"] not in (0, None):
             return "🔴 WINDOWS FAILED"
 
-        # Script failure
         if row["status"] == "FAILED":
             return "🔴 SCRIPT FAILED"
 
-        # Script running
         if row["status"] == "RUNNING":
             return "🟡 RUNNING"
 
-        # Windows ran but script not logging yet
+        # Windows ran but script not upgraded yet
         if pd.isnull(row["run_start"]) and pd.notnull(row["last_run_time"]):
             return "🟢 HEALTHY (WINDOWS)"
 
-        # Only check missed schedule if script logging exists
+        # Only evaluate missed schedule if script logging exists
         if pd.notnull(row["run_start"]) and pd.notnull(row["next_run_time"]):
-
             if (
                 now > row["next_run_time"] + pd.Timedelta(minutes=2)
                 and row["run_start"] < row["next_run_time"]
@@ -155,13 +221,11 @@ def load_task_status():
 
     df["health"] = df.apply(health, axis=1)
 
-    # Minutes since last script run (safe calculation)
     df["minutes_since_last_run"] = (
         (now - df["run_start"]).dt.total_seconds() / 60
     ).round(1)
 
     return df
-
 
 # --------------------------------------------------
 # UI
@@ -169,9 +233,67 @@ def load_task_status():
 
 st.title("🛡️ Encore Monitoring")
 
-tabs = st.tabs(["🖥 Task Monitoring"])
+tabs = st.tabs([
+    "🚨 Instruments Requiring Attention",
+    "🏭 Sector → Cohort → Instruments",
+    "🖥 Task Monitoring"
+])
+
+# --------------------------------------------------
+# TAB 1 – SECURITY MASTER GAPS
+# --------------------------------------------------
 
 with tabs[0]:
+
+    st.subheader("🚨 Instruments Requiring Attention")
+
+    issues = load_security_master_issues()
+
+    if issues.empty:
+        st.success("✅ All instruments have valid sector & cohort assignments.")
+    else:
+        st.warning(f"⚠ {len(issues)} instruments require attention")
+        st.dataframe(issues, use_container_width=True)
+
+# --------------------------------------------------
+# TAB 2 – SECURITY MASTER EXPLORER
+# --------------------------------------------------
+
+with tabs[1]:
+
+    st.subheader("🏭 Security Master Explorer")
+
+    sectors = load_sectors()
+    sel_sector = st.selectbox("Select Sector", sectors["sector_name"])
+
+    sector_id = sectors.loc[
+        sectors["sector_name"] == sel_sector,
+        "sector_id"
+    ].iloc[0]
+
+    cohorts = load_cohorts(sector_id)
+
+    if cohorts.empty:
+        st.info("No cohorts defined.")
+    else:
+        sel_cohort = st.selectbox("Select Cohort", cohorts["cohort_name"])
+        cohort_id = cohorts.loc[
+            cohorts["cohort_name"] == sel_cohort,
+            "cohort_id"
+        ].iloc[0]
+
+        instruments = load_instruments_for_cohort(cohort_id)
+
+        if instruments.empty:
+            st.info("No instruments assigned.")
+        else:
+            st.dataframe(instruments, use_container_width=True)
+
+# --------------------------------------------------
+# TAB 3 – TASK MONITORING
+# --------------------------------------------------
+
+with tabs[2]:
 
     st.subheader("🖥 Windows Task Monitoring")
 
