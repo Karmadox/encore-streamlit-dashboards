@@ -169,6 +169,8 @@ def load_task_status():
 
     # Use naive local time for comparison
     now = datetime.now()
+    st.write("DEBUG NOW:", datetime.now())
+    st.write("DEBUG DB RUN_START:", latest["run_start"].iloc[0])
 
     latest["minutes_since_last_run"] = (
         (now - latest["run_start"]).dt.total_seconds() / 60
