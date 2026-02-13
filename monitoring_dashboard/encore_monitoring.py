@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import psycopg2
-from datetime import date, datetime
+from datetime import date
 import streamlit_autorefresh
 
 # -------------------------------------------------
@@ -136,7 +136,7 @@ def load_security_master_issues():
         return pd.read_sql(sql, conn)
 
 # --------------------------------------------------
-# TASK MONITORING LOADER (FIXED – NO TIMEZONE LOGIC)
+# ENTERPRISE TASK MONITORING (WINDOWS = SOURCE OF TRUTH)
 # --------------------------------------------------
 
 @st.cache_data(ttl=60)
@@ -182,10 +182,7 @@ def load_task_status():
     if df.empty:
         return df
 
-    # ----------------------------
-    # Parse timestamps (CST → UTC)
-    # ----------------------------
-
+    # Convert timestamps (stored as CST) → UTC
     for col in ["run_start", "run_end", "last_run_time", "next_run_time"]:
         df[col] = pd.to_datetime(df[col], errors="coerce")
         df[col] = (
@@ -197,7 +194,7 @@ def load_task_status():
     now = pd.Timestamp.utcnow()
 
     # ----------------------------
-    # Health Logic (NO HARDCODING)
+    # Intelligent Health Logic
     # ----------------------------
 
     def health(row):
@@ -214,7 +211,6 @@ def load_task_status():
         if row["status"] == "RUNNING":
             return "🟡 RUNNING"
 
-        # Check schedule miss
         if pd.notnull(row["next_run_time"]):
             if now > row["next_run_time"] + pd.Timedelta(minutes=2):
                 return "🟠 MISSED SCHEDULE"
@@ -223,7 +219,6 @@ def load_task_status():
 
     df["health"] = df.apply(health, axis=1)
 
-    # Optional: minutes since last run (for display only)
     df["minutes_since_last_run"] = (
         (now - df["run_start"]).dt.total_seconds() / 60
     ).round(1)
@@ -306,11 +301,14 @@ with tabs[2]:
                 [
                     "task_name",
                     "health",
+                    "enabled",
                     "status",
+                    "last_task_result",
                     "run_start",
                     "run_end",
                     "runtime_seconds",
                     "rows_processed",
+                    "next_run_time",
                     "minutes_since_last_run"
                 ]
             ],
@@ -320,10 +318,12 @@ with tabs[2]:
         st.markdown(
             """
             **Health Definitions**
-            - 🟢 HEALTHY → Ran successfully within expected window  
-            - 🟠 STALE → Missed expected schedule (>6 minutes for 3-min job)  
-            - 🔴 FAILED → Last execution failed  
+            - 🟢 HEALTHY → Windows + Script both successful  
+            - 🟠 MISSED SCHEDULE → Now past next scheduled run  
+            - 🔴 WINDOWS FAILED → Task Scheduler failure  
+            - 🔴 SCRIPT FAILED → Python execution failed  
             - 🟡 RUNNING → Currently executing  
+            - ⚪ DISABLED → Task disabled in Windows  
             """
         )
 
@@ -334,4 +334,3 @@ with tabs[2]:
 st.caption(
     f"Data as of {date.today().isoformat()} • Encore Internal Monitoring"
 )
-
