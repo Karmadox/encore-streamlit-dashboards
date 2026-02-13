@@ -155,7 +155,7 @@ def load_task_status():
     if df.empty:
         return df
 
-    # Get latest run per task
+    # Latest run per task
     latest = (
         df.sort_values("run_start", ascending=False)
           .groupby("task_name")
@@ -163,20 +163,31 @@ def load_task_status():
           .reset_index()
     )
 
-    # Parse timestamps as naive (DO NOT attach timezone)
+    # Parse timestamps (naive)
     latest["run_start"] = pd.to_datetime(latest["run_start"], errors="coerce")
     latest["run_end"] = pd.to_datetime(latest["run_end"], errors="coerce")
 
-    # Use naive local time for comparison
-    now = datetime.now()
-    st.write("DEBUG NOW:", datetime.now())
-    st.write("DEBUG DB RUN_START:", latest["run_start"].iloc[0])
+    # 🔒 Tell pandas these timestamps are CST
+    latest["run_start"] = (
+        latest["run_start"]
+        .dt.tz_localize("America/Chicago")
+        .dt.tz_convert("UTC")
+    )
+
+    latest["run_end"] = (
+        latest["run_end"]
+        .dt.tz_localize("America/Chicago")
+        .dt.tz_convert("UTC")
+    )
+
+    # Use true UTC now
+    now = pd.Timestamp.utcnow()
 
     latest["minutes_since_last_run"] = (
         (now - latest["run_start"]).dt.total_seconds() / 60
     ).round(1)
 
-    # Health logic
+    # Health logic (3-minute job rule)
     def health(row):
         if row["status"] == "FAILED":
             return "🔴 FAILED"
@@ -189,6 +200,7 @@ def load_task_status():
     latest["health"] = latest.apply(health, axis=1)
 
     return latest
+
 
 # --------------------------------------------------
 # UI
