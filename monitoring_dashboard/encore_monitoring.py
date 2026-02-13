@@ -43,7 +43,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# Auto refresh every 60 seconds
 streamlit_autorefresh.st_autorefresh(interval=60000, key="monitor_refresh")
 
 DB_CONFIG = st.secrets["db"]
@@ -136,7 +135,8 @@ def load_security_master_issues():
         return pd.read_sql(sql, conn)
 
 # --------------------------------------------------
-# ENTERPRISE TASK MONITORING (WINDOWS = SOURCE OF TRUTH)
+# ENTERPRISE TASK MONITORING
+# Windows = source of truth
 # --------------------------------------------------
 
 @st.cache_data(ttl=60)
@@ -162,7 +162,6 @@ def load_task_status():
             r.last_run_time,
             r.next_run_time,
             r.last_task_result,
-
             e.status,
             e.run_start,
             e.run_end,
@@ -182,7 +181,10 @@ def load_task_status():
     if df.empty:
         return df
 
-    # Convert timestamps (stored as CST) → UTC
+    # ---------------------------------------
+    # Convert CST timestamps → UTC
+    # ---------------------------------------
+
     for col in ["run_start", "run_end", "last_run_time", "next_run_time"]:
         df[col] = pd.to_datetime(df[col], errors="coerce")
         df[col] = (
@@ -193,27 +195,36 @@ def load_task_status():
 
     now = pd.Timestamp.utcnow()
 
-    # ----------------------------
-    # Intelligent Health Logic
-    # ----------------------------
+    # ---------------------------------------
+    # Enterprise Health Logic
+    # ---------------------------------------
 
     def health(row):
 
-        if not row["enabled"]:
+        # 1️⃣ Disabled in Windows
+        if row["enabled"] is False:
             return "⚪ DISABLED"
 
+        # 2️⃣ Windows-level failure
         if row["last_task_result"] not in (0, None):
             return "🔴 WINDOWS FAILED"
 
+        # 3️⃣ Script-level failure
         if row["status"] == "FAILED":
             return "🔴 SCRIPT FAILED"
 
+        # 4️⃣ Currently running
         if row["status"] == "RUNNING":
             return "🟡 RUNNING"
 
+        # 5️⃣ Missed schedule
         if pd.notnull(row["next_run_time"]):
             if now > row["next_run_time"] + pd.Timedelta(minutes=2):
                 return "🟠 MISSED SCHEDULE"
+
+        # 6️⃣ No script logging but Windows ran successfully
+        if pd.isnull(row["run_start"]) and pd.notnull(row["last_run_time"]):
+            return "🟢 HEALTHY (WINDOWS)"
 
         return "🟢 HEALTHY"
 
@@ -308,6 +319,7 @@ with tabs[2]:
                     "run_end",
                     "runtime_seconds",
                     "rows_processed",
+                    "last_run_time",
                     "next_run_time",
                     "minutes_since_last_run"
                 ]
@@ -318,12 +330,13 @@ with tabs[2]:
         st.markdown(
             """
             **Health Definitions**
-            - 🟢 HEALTHY → Windows + Script both successful  
+            - 🟢 HEALTHY → Windows + Script OK  
+            - 🟢 HEALTHY (WINDOWS) → Windows ran, script not logging  
             - 🟠 MISSED SCHEDULE → Now past next scheduled run  
             - 🔴 WINDOWS FAILED → Task Scheduler failure  
-            - 🔴 SCRIPT FAILED → Python execution failed  
+            - 🔴 SCRIPT FAILED → Python execution failure  
             - 🟡 RUNNING → Currently executing  
-            - ⚪ DISABLED → Task disabled in Windows  
+            - ⚪ DISABLED → Disabled in Windows Task Scheduler  
             """
         )
 
