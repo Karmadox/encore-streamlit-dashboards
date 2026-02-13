@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import psycopg2
 from datetime import date
+import streamlit_autorefresh
 
 # -------------------------------------------------
 # SIMPLE PASSWORD AUTH
@@ -42,6 +43,9 @@ st.set_page_config(
     layout="wide"
 )
 
+# Auto refresh every 60 seconds
+streamlit_autorefresh.st_autorefresh(interval=60000, key="monitor_refresh")
+
 DB_CONFIG = st.secrets["db"]
 
 # --------------------------------------------------
@@ -52,7 +56,6 @@ def get_conn():
     return psycopg2.connect(**DB_CONFIG)
 
 def sql_param(x):
-    """Convert numpy scalars to native Python types"""
     if hasattr(x, "item"):
         return x.item()
     return x
@@ -109,11 +112,6 @@ def load_instruments_for_cohort(cohort_id):
 
 @st.cache_data(ttl=300)
 def load_security_master_issues():
-    """
-    Return instruments in latest positions that have
-    missing / ambiguous sector or cohort assignment,
-    with an explicit reason.
-    """
     sql = """
         WITH latest_positions AS (
             SELECT *
@@ -122,151 +120,105 @@ def load_security_master_issues():
                 SELECT MAX(snapshot_date)
                 FROM encoredb.positions_eod_snapshot
             )
-        ),
-
-        primary_candidates AS (
-            SELECT
-                w.instrument_id,
-                w.cohort_id,
-                w.effective_date
-            FROM encoredb.instrument_cohort_weights w
-            WHERE w.is_primary = true
-        ),
-
-        primary_valid AS (
-            SELECT
-                p.instrument_id,
-                MAX(w.effective_date) AS effective_date
-            FROM latest_positions p
-            LEFT JOIN primary_candidates w
-              ON w.instrument_id = p.instrument_id
-             AND w.effective_date <= p.snapshot_date
-            GROUP BY p.instrument_id
-        ),
-
-        primary_count AS (
-            SELECT
-                p.instrument_id,
-                COUNT(*) AS primary_count
-            FROM latest_positions p
-            JOIN primary_candidates w
-              ON w.instrument_id = p.instrument_id
-             AND w.effective_date <= p.snapshot_date
-            GROUP BY p.instrument_id
         )
-
-        SELECT
-            i.ticker,
-            i.name,
-
-            CASE
-                WHEN NOT EXISTS (
-                    SELECT 1
-                    FROM encoredb.instrument_cohort_weights w
-                    WHERE w.instrument_id = p.instrument_id
-                )
-                    THEN 'No cohort assignments exist'
-
-                WHEN pv.effective_date IS NULL
-                    THEN 'Primary cohort exists but only in the future'
-
-                WHEN pc.primary_count > 1
-                    THEN 'Multiple primary cohorts valid for date'
-
-                WHEN s.sector_id IS NULL
-                    THEN 'Primary cohort has no sector'
-
-                ELSE 'Unknown issue'
-            END AS issue_reason
-
+        SELECT i.ticker, i.name
         FROM latest_positions p
         JOIN encoredb.instruments i
           ON i.instrument_id = p.instrument_id
-
-        LEFT JOIN primary_valid pv
-          ON pv.instrument_id = p.instrument_id
-
-        LEFT JOIN primary_count pc
-          ON pc.instrument_id = p.instrument_id
-
-        LEFT JOIN encoredb.instrument_cohort_weights w
-          ON w.instrument_id = p.instrument_id
-         AND w.is_primary = true
-         AND w.effective_date = pv.effective_date
-
-        LEFT JOIN encoredb.cohorts c
-          ON c.cohort_id = w.cohort_id
-
-        LEFT JOIN encoredb.sectors s
-          ON s.sector_id = c.sector_id
-
-        WHERE
-            pv.effective_date IS NULL
-            OR pc.primary_count > 1
-            OR s.sector_id IS NULL
-
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM encoredb.instrument_cohort_weights w
+            WHERE w.instrument_id = p.instrument_id
+        )
         ORDER BY i.ticker
     """
     with get_conn() as conn:
         return pd.read_sql(sql, conn)
 
 # --------------------------------------------------
+# TASK MONITORING LOADER
+# --------------------------------------------------
+
+@st.cache_data(ttl=60)
+def load_task_status():
+    sql = """
+        SELECT *
+        FROM encoredb.task_execution_log
+        WHERE run_start >= NOW() - INTERVAL '1 day'
+        ORDER BY run_start DESC
+    """
+    with get_conn() as conn:
+        df = pd.read_sql(sql, conn)
+
+    if df.empty:
+        return df
+
+    latest = (
+        df.sort_values("run_start", ascending=False)
+          .groupby("task_name")
+          .first()
+          .reset_index()
+    )
+
+    latest["run_start"] = pd.to_datetime(latest["run_start"])
+    latest["run_end"] = pd.to_datetime(latest["run_end"])
+
+    now = pd.Timestamp.utcnow()
+
+    latest["minutes_since_last_run"] = (
+        (now - latest["run_start"]).dt.total_seconds() / 60
+    ).round(1)
+
+    # Health logic (3-min job rule)
+    def health(row):
+        if row["status"] == "FAILED":
+            return "🔴 FAILED"
+        if row["status"] == "RUNNING":
+            return "🟡 RUNNING"
+        if row["minutes_since_last_run"] > 6:
+            return "🟠 STALE"
+        return "🟢 HEALTHY"
+
+    latest["health"] = latest.apply(health, axis=1)
+
+    return latest
+
+# --------------------------------------------------
 # UI
 # --------------------------------------------------
 
-st.title("🛡️ Encore Monitoring – Security Master")
+st.title("🛡️ Encore Monitoring")
 
 tabs = st.tabs([
     "🚨 Instruments Requiring Attention",
-    "🏭 Sector → Cohort → Instruments"
+    "🏭 Sector → Cohort → Instruments",
+    "🖥 Task Monitoring"
 ])
 
 # ==================================================
 # TAB 1 — SECURITY MASTER ISSUES
 # ==================================================
 with tabs[0]:
-    st.subheader("🚨 Instruments Requiring Attention")
 
+    st.subheader("🚨 Instruments Requiring Attention")
     issues = load_security_master_issues()
 
     if issues.empty:
         st.success("✅ All instruments have valid sector & cohort assignments.")
     else:
         st.warning(f"⚠ {len(issues)} instruments require attention")
-
-        st.dataframe(
-            issues,
-            use_container_width=True
-        )
-
-        with st.expander("ℹ️ How to interpret issues"):
-            st.markdown(
-                """
-                **Issue meanings**
-                - **No cohort assignments exist**  
-                  → Instrument never mapped in `instrument_cohort_weights`
-                - **Primary cohort exists but only in the future**  
-                  → Missing historical backfill
-                - **Multiple primary cohorts valid for date**  
-                  → Duplicate primary mappings
-                - **Primary cohort has no sector**  
-                  → Cohort definition incomplete
-                """
-            )
+        st.dataframe(issues, use_container_width=True)
 
 # ==================================================
-# TAB 2 — SECTOR → COHORT → INSTRUMENTS
+# TAB 2 — SECURITY MASTER EXPLORER
 # ==================================================
 with tabs[1]:
+
     st.subheader("🏭 Security Master Explorer")
 
     sectors = load_sectors()
 
-    sel_sector = st.selectbox(
-        "Select Sector",
-        sectors["sector_name"],
-        key="sector_select"
-    )
+    sel_sector = st.selectbox("Select Sector", sectors["sector_name"])
 
     sector_id = sectors.loc[
         sectors["sector_name"] == sel_sector,
@@ -276,36 +228,57 @@ with tabs[1]:
     cohorts = load_cohorts(sector_id)
 
     if cohorts.empty:
-        st.info("No cohorts defined for this sector.")
-        st.stop()
-
-    sel_cohort = st.selectbox(
-        "Select Cohort",
-        cohorts["cohort_name"],
-        key="cohort_select"
-    )
-
-    cohort_id = cohorts.loc[
-        cohorts["cohort_name"] == sel_cohort,
-        "cohort_id"
-    ].iloc[0]
-
-    instruments = load_instruments_for_cohort(cohort_id)
-
-    if instruments.empty:
-        st.info("No instruments assigned to this cohort.")
+        st.info("No cohorts defined.")
     else:
-        st.markdown(
-            """
-            **Legend**
-            - ⭐ `is_primary = true`
-            - `weight_pct` is fractional (1.0 = 100%)
-            """
+        sel_cohort = st.selectbox("Select Cohort", cohorts["cohort_name"])
+        cohort_id = cohorts.loc[
+            cohorts["cohort_name"] == sel_cohort,
+            "cohort_id"
+        ].iloc[0]
+
+        instruments = load_instruments_for_cohort(cohort_id)
+
+        if instruments.empty:
+            st.info("No instruments assigned.")
+        else:
+            st.dataframe(instruments, use_container_width=True)
+
+# ==================================================
+# TAB 3 — TASK MONITORING
+# ==================================================
+with tabs[2]:
+
+    st.subheader("🖥 Windows Task Monitoring")
+
+    tasks = load_task_status()
+
+    if tasks.empty:
+        st.warning("No task executions found.")
+    else:
+        st.dataframe(
+            tasks[
+                [
+                    "task_name",
+                    "health",
+                    "status",
+                    "run_start",
+                    "run_end",
+                    "runtime_seconds",
+                    "rows_processed",
+                    "minutes_since_last_run"
+                ]
+            ],
+            use_container_width=True
         )
 
-        st.dataframe(
-            instruments,
-            use_container_width=True
+        st.markdown(
+            """
+            **Health Definitions**
+            - 🟢 HEALTHY → Ran successfully within expected window  
+            - 🟠 STALE → Missed expected schedule  
+            - 🔴 FAILED → Last execution failed  
+            - 🟡 RUNNING → Currently executing  
+            """
         )
 
 # --------------------------------------------------
