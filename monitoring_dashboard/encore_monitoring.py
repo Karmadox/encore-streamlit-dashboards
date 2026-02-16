@@ -86,39 +86,60 @@ def load_cohorts(sector_id):
         return pd.read_sql(sql, conn, params=(sql_param(sector_id),))
 
 
+# 🔥 OPTIMIZED + CORRECT PRIMARY LOGIC
 @st.cache_data(ttl=300)
 def load_instruments_for_cohort(cohort_id):
+
     sql = """
+        WITH latest_weights AS (
+            SELECT *
+            FROM encoredb.instrument_cohort_weights
+            WHERE cohort_id = %s
+              AND effective_date = (
+                  SELECT MAX(effective_date)
+                  FROM encoredb.instrument_cohort_weights
+                  WHERE cohort_id = %s
+              )
+        ),
+        primary_flags AS (
+            SELECT instrument_id
+            FROM encoredb.instrument_cohort_weights
+            WHERE cohort_id = %s
+              AND is_primary = TRUE
+        )
+
         SELECT
             i.ticker,
             i.name,
             w.weight_pct,
-            w.is_primary,
+            CASE
+                WHEN p.instrument_id IS NOT NULL THEN TRUE
+                ELSE FALSE
+            END AS is_primary,
             w.effective_date,
             w.source
-        FROM encoredb.instrument_cohort_weights w
+        FROM latest_weights w
         JOIN encoredb.instruments i
           ON i.instrument_id = w.instrument_id
-        WHERE w.cohort_id = %s
-          AND w.effective_date = (
-              SELECT MAX(w2.effective_date)
-              FROM encoredb.instrument_cohort_weights w2
-              WHERE w2.instrument_id = w.instrument_id
-                AND w2.cohort_id = w.cohort_id
-          )
-        ORDER BY w.is_primary DESC, w.weight_pct DESC, i.ticker
+        LEFT JOIN primary_flags p
+          ON p.instrument_id = w.instrument_id
+        ORDER BY is_primary DESC, w.weight_pct DESC, i.ticker;
     """
 
     with get_conn() as conn:
-        df = pd.read_sql(sql, conn, params=(sql_param(cohort_id),))
-
-    # 🔥 CRITICAL FIX — ensure checkbox rendering
-    if "is_primary" in df.columns:
-        df["is_primary"] = (
-            df["is_primary"]
-            .fillna(False)
-            .astype(bool)
+        df = pd.read_sql(
+            sql,
+            conn,
+            params=(
+                sql_param(cohort_id),
+                sql_param(cohort_id),
+                sql_param(cohort_id),
+            ),
         )
+
+    # Ensure Streamlit renders checkbox correctly
+    if "is_primary" in df.columns:
+        df["is_primary"] = df["is_primary"].fillna(False).astype(bool)
 
     return df
 
