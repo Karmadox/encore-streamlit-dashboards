@@ -108,8 +108,19 @@ def load_instruments_for_cohort(cohort_id):
           )
         ORDER BY w.is_primary DESC, w.weight_pct DESC, i.ticker
     """
+
     with get_conn() as conn:
-        return pd.read_sql(sql, conn, params=(sql_param(cohort_id),))
+        df = pd.read_sql(sql, conn, params=(sql_param(cohort_id),))
+
+    # 🔥 CRITICAL FIX — ensure checkbox rendering
+    if "is_primary" in df.columns:
+        df["is_primary"] = (
+            df["is_primary"]
+            .fillna(False)
+            .astype(bool)
+        )
+
+    return df
 
 
 @st.cache_data(ttl=300)
@@ -180,7 +191,6 @@ def load_task_status():
     if df.empty:
         return df
 
-    # Convert CST → UTC
     for col in ["run_start", "run_end", "last_run_time", "next_run_time"]:
         df[col] = pd.to_datetime(df[col], errors="coerce")
         df[col] = (
@@ -205,11 +215,9 @@ def load_task_status():
         if row["status"] == "RUNNING":
             return "🟡 RUNNING"
 
-        # Windows ran but script not upgraded yet
         if pd.isnull(row["run_start"]) and pd.notnull(row["last_run_time"]):
             return "🟢 HEALTHY (WINDOWS)"
 
-        # Only evaluate missed schedule if script logging exists
         if pd.notnull(row["run_start"]) and pd.notnull(row["next_run_time"]):
             if (
                 now > row["next_run_time"] + pd.Timedelta(minutes=2)
@@ -240,7 +248,7 @@ tabs = st.tabs([
 ])
 
 # --------------------------------------------------
-# TAB 1 – SECURITY MASTER GAPS
+# TAB 1
 # --------------------------------------------------
 
 with tabs[0]:
@@ -256,7 +264,7 @@ with tabs[0]:
         st.dataframe(issues, use_container_width=True)
 
 # --------------------------------------------------
-# TAB 2 – SECURITY MASTER EXPLORER
+# TAB 2
 # --------------------------------------------------
 
 with tabs[1]:
@@ -290,7 +298,7 @@ with tabs[1]:
             st.dataframe(instruments, use_container_width=True)
 
 # --------------------------------------------------
-# TAB 3 – TASK MONITORING
+# TAB 3
 # --------------------------------------------------
 
 with tabs[2]:
