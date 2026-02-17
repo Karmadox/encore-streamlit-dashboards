@@ -829,22 +829,23 @@ elif active_tab == "📈 Price Change Driven":
 
     now_cst = datetime.now(pytz.timezone("US/Central")).strftime("%H:%M")
 
-    # Identify past vs future columns
     past_cols = [c for c in bucket_table.columns if c <= now_cst]
     future_cols = [c for c in bucket_table.columns if c > now_cst]
 
-    # Fill ONLY past columns with 0
     bucket_table[past_cols] = bucket_table[past_cols].fillna(0)
-
-    # Leave future columns as NaN (blank)
-
-    # Convert past columns to integers (preserves blank future cells)
     bucket_table[past_cols] = bucket_table[past_cols].astype("Int64")
 
     st.dataframe(bucket_table, width="stretch")
 
+    # --------------------------------
+    # FILTER BY BUCKET
+    # --------------------------------
     sel_bucket = st.selectbox("Select Price Bucket", BUCKET_ORDER)
     bucket_df = latest[latest["move_bucket"] == sel_bucket]
+
+    if bucket_df.empty:
+        st.info("No instruments in this bucket.")
+        st.stop()
 
     # --------------------------------
     # SECTOR BREAKDOWN
@@ -872,59 +873,90 @@ elif active_tab == "📈 Price Change Driven":
 
     sector_df = bucket_df[bucket_df["egm_sector_v2"] == sel_sector]
 
+    if sector_df.empty:
+        st.info("No instruments in this sector for selected bucket.")
+        st.stop()
+
     # --------------------------------
-    # SECTOR WITH COHORTS
+    # COHORT HANDLING (ROBUST VERSION)
     # --------------------------------
     if sector_has_cohorts(sel_sector):
+
         cohorts = load_cohorts_for_sector(sel_sector, selected_date)
-        ct_df = sector_df.merge(cohorts, on="ticker", how="inner")
 
-        cohort_view = (
-            ct_df
-            .groupby("cohort_name")
-            .agg(
-                names=("ticker", "nunique"),
-                net_nmv=("nmv", "sum"),
-                avg_move=("effective_price_change_pct", "mean"),
+        # 🔥 LEFT JOIN (not inner)
+        ct_df = sector_df.merge(cohorts, on="ticker", how="left")
+
+        # Only proceed if real cohort matches exist
+        if "cohort_name" in ct_df.columns and ct_df["cohort_name"].notna().any():
+
+            cohort_view = (
+                ct_df
+                .dropna(subset=["cohort_name"])
+                .groupby("cohort_name")
+                .agg(
+                    names=("ticker", "nunique"),
+                    net_nmv=("nmv", "sum"),
+                    avg_move=("effective_price_change_pct", "mean"),
+                )
+                .reset_index()
+                .sort_values("net_nmv", ascending=False)
             )
-            .reset_index()
-            .sort_values("net_nmv", ascending=False)
-        )
 
-        st.subheader("🧩 Cohort Breakdown")
-        st.dataframe(cohort_view, width="stretch")
+            st.subheader("🧩 Cohort Breakdown")
+            st.dataframe(cohort_view, width="stretch")
 
-        sel_cohort = st.selectbox(
-            "Select Cohort",
-            cohort_view["cohort_name"],
-            key="price_cohort_select",
-        )
+            sel_cohort = st.selectbox(
+                "Select Cohort",
+                cohort_view["cohort_name"],
+                key="price_cohort_select",
+            )
 
-        instrument_df = ct_df[ct_df["cohort_name"] == sel_cohort]
+            instrument_df = ct_df[ct_df["cohort_name"] == sel_cohort]
 
-        df = safe_select(
-            instrument_df,
-            [
-                "ticker",
-                "description",
-                "quantity",
-                "effective_price_change_pct",
-                "nmv",
-                "weight_pct",
-                "is_primary",
-            ],
-        )
+            df = safe_select(
+                instrument_df,
+                [
+                    "ticker",
+                    "description",
+                    "quantity",
+                    "effective_price_change_pct",
+                    "nmv",
+                    "weight_pct",
+                    "is_primary",
+                ],
+            )
 
-        st.subheader(f"📋 Instrument Detail — {sel_cohort}")
-        st.dataframe(
-            safe_sort(df, "effective_price_change_pct"),
-            width="stretch",
-        )
+            st.subheader(f"📋 Instrument Detail — {sel_cohort}")
+            st.dataframe(
+                safe_sort(df, "effective_price_change_pct"),
+                width="stretch",
+            )
 
-    # --------------------------------
-    # SECTOR WITHOUT COHORTS
-    # --------------------------------
+        else:
+            # 🔥 FALLBACK — behaves like non-cohort sector
+            st.subheader(f"📋 Instrument Detail — {sel_sector}")
+
+            df = safe_select(
+                sector_df,
+                [
+                    "ticker",
+                    "description",
+                    "quantity",
+                    "effective_price_change_pct",
+                    "nmv",
+                ],
+            )
+
+            st.dataframe(
+                safe_sort(df, "effective_price_change_pct"),
+                width="stretch",
+            )
+
     else:
+        # --------------------------------
+        # SECTOR WITHOUT COHORTS
+        # --------------------------------
         df = safe_select(
             sector_df,
             [
