@@ -86,7 +86,6 @@ def load_cohorts(sector_id):
         return pd.read_sql(sql, conn, params=(sql_param(sector_id),))
 
 
-# 🔥 OPTIMIZED + CORRECT PRIMARY LOGIC
 @st.cache_data(ttl=300)
 def load_instruments_for_cohort(cohort_id):
 
@@ -137,7 +136,6 @@ def load_instruments_for_cohort(cohort_id):
             ),
         )
 
-    # Ensure Streamlit renders checkbox correctly
     if "is_primary" in df.columns:
         df["is_primary"] = df["is_primary"].fillna(False).astype(bool)
 
@@ -212,15 +210,26 @@ def load_task_status():
     if df.empty:
         return df
 
+    # --------------------------------------------------
+    # 🔥 CONVERT UTC → CST FOR DISPLAY ONLY
+    # --------------------------------------------------
+
+    display_timezone = "America/Chicago"
+
     for col in ["run_start", "run_end", "last_run_time", "next_run_time"]:
         df[col] = pd.to_datetime(df[col], errors="coerce")
-        df[col] = (
-            df[col]
-            .dt.tz_localize("America/Chicago", nonexistent="NaT", ambiguous="NaT")
-            .dt.tz_convert("UTC")
-        )
 
-    now = pd.Timestamp.utcnow()
+        # Treat DB values as UTC
+        df[col] = df[col].dt.tz_localize("UTC")
+
+        # Convert to CST/CDT for UI
+        df[col] = df[col].dt.tz_convert(display_timezone)
+
+    # --------------------------------------------------
+    # HEALTH LOGIC (STILL IN UTC)
+    # --------------------------------------------------
+
+    now = pd.Timestamp.utcnow().tz_localize("UTC")
 
     def health(row):
 
@@ -239,10 +248,14 @@ def load_task_status():
         if pd.isnull(row["run_start"]) and pd.notnull(row["last_run_time"]):
             return "🟢 HEALTHY (WINDOWS)"
 
-        if pd.notnull(row["run_start"]) and pd.notnull(row["next_run_time"]):
+        # Convert back to UTC for safe comparison
+        run_start_utc = row["run_start"].tz_convert("UTC") if pd.notnull(row["run_start"]) else None
+        next_run_utc = row["next_run_time"].tz_convert("UTC") if pd.notnull(row["next_run_time"]) else None
+
+        if run_start_utc and next_run_utc:
             if (
-                now > row["next_run_time"] + pd.Timedelta(minutes=2)
-                and row["run_start"] < row["next_run_time"]
+                now > next_run_utc + pd.Timedelta(minutes=2)
+                and run_start_utc < next_run_utc
             ):
                 return "🟠 MISSED SCHEDULE"
 
@@ -250,8 +263,9 @@ def load_task_status():
 
     df["health"] = df.apply(health, axis=1)
 
+    # minutes since last run (computed safely in UTC)
     df["minutes_since_last_run"] = (
-        (now - df["run_start"]).dt.total_seconds() / 60
+        (now - df["run_start"].dt.tz_convert("UTC")).dt.total_seconds() / 60
     ).round(1)
 
     return df
@@ -268,10 +282,6 @@ tabs = st.tabs([
     "🖥 Task Monitoring"
 ])
 
-# --------------------------------------------------
-# TAB 1
-# --------------------------------------------------
-
 with tabs[0]:
 
     st.subheader("🚨 Instruments Requiring Attention")
@@ -283,10 +293,6 @@ with tabs[0]:
     else:
         st.warning(f"⚠ {len(issues)} instruments require attention")
         st.dataframe(issues, use_container_width=True)
-
-# --------------------------------------------------
-# TAB 2
-# --------------------------------------------------
 
 with tabs[1]:
 
@@ -318,10 +324,6 @@ with tabs[1]:
         else:
             st.dataframe(instruments, use_container_width=True)
 
-# --------------------------------------------------
-# TAB 3
-# --------------------------------------------------
-
 with tabs[2]:
 
     st.subheader("🖥 Windows Task Monitoring")
@@ -350,23 +352,6 @@ with tabs[2]:
             ],
             use_container_width=True
         )
-
-        st.markdown(
-            """
-            **Health Definitions**
-            - 🟢 HEALTHY → Windows + Script OK  
-            - 🟢 HEALTHY (WINDOWS) → Windows ran, script not logging  
-            - 🟠 MISSED SCHEDULE → Script logging exists and missed next scheduled run  
-            - 🔴 WINDOWS FAILED → Task Scheduler failure  
-            - 🔴 SCRIPT FAILED → Python execution failure  
-            - 🟡 RUNNING → Currently executing  
-            - ⚪ DISABLED → Disabled in Windows Task Scheduler  
-            """
-        )
-
-# --------------------------------------------------
-# FOOTER
-# --------------------------------------------------
 
 st.caption(
     f"Data as of {date.today().isoformat()} • Encore Internal Monitoring"
