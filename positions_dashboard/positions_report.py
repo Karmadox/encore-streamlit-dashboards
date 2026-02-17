@@ -816,30 +816,31 @@ elif active_tab == "📈 Price Change Driven":
     # PRICE MOVE DISTRIBUTION
     # --------------------------------
     bucket_table = (
-    intraday
-    .groupby(["time_label", "move_bucket"])
-    .agg(names=("ticker", "nunique"))
-    .reset_index()
-    .pivot(index="move_bucket", columns="time_label", values="names")
-    .reindex(index=BUCKET_ORDER, columns=TIME_GRID)
+        intraday
+        .groupby(["time_label", "move_bucket"])
+        .agg(names=("ticker", "nunique"))
+        .reset_index()
+        .pivot(index="move_bucket", columns="time_label", values="names")
+        .reindex(index=BUCKET_ORDER, columns=TIME_GRID)
     )
-
-    # -----------------------------------------
-    # Blank out future time buckets
-    # -----------------------------------------
 
     from datetime import datetime
     import pytz
 
     now_cst = datetime.now(pytz.timezone("US/Central")).strftime("%H:%M")
 
-    for col in bucket_table.columns:
-        if col > now_cst:
-            bucket_table[col] = None
+    # Identify past vs future columns
+    past_cols = [c for c in bucket_table.columns if c <= now_cst]
+    future_cols = [c for c in bucket_table.columns if c > now_cst]
 
-    # Fill remaining NaNs (past times) with 0
-    bucket_table = bucket_table.fillna(0).astype("Int64")
-    
+    # Fill ONLY past columns with 0
+    bucket_table[past_cols] = bucket_table[past_cols].fillna(0)
+
+    # Leave future columns as NaN (blank)
+
+    # Convert past columns to integers (preserves blank future cells)
+    bucket_table[past_cols] = bucket_table[past_cols].astype("Int64")
+
     st.dataframe(bucket_table, width="stretch")
 
     sel_bucket = st.selectbox("Select Price Bucket", BUCKET_ORDER)
