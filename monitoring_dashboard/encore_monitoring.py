@@ -59,7 +59,6 @@ def sql_param(x):
         return x.item()
     return x
 
-
 # --------------------------------------------------
 # DATA LOADERS – SECURITY MASTER
 # --------------------------------------------------
@@ -87,6 +86,7 @@ def load_cohorts(sector_id):
         return pd.read_sql(sql, conn, params=(sql_param(sector_id),))
 
 
+# 🔥 OPTIMIZED + CORRECT PRIMARY LOGIC
 @st.cache_data(ttl=300)
 def load_instruments_for_cohort(cohort_id):
 
@@ -107,6 +107,7 @@ def load_instruments_for_cohort(cohort_id):
             WHERE cohort_id = %s
               AND is_primary = TRUE
         )
+
         SELECT
             i.ticker,
             i.name,
@@ -129,9 +130,14 @@ def load_instruments_for_cohort(cohort_id):
         df = pd.read_sql(
             sql,
             conn,
-            params=(cohort_id, cohort_id, cohort_id),
+            params=(
+                sql_param(cohort_id),
+                sql_param(cohort_id),
+                sql_param(cohort_id),
+            ),
         )
 
+    # Ensure Streamlit renders checkbox correctly
     if "is_primary" in df.columns:
         df["is_primary"] = df["is_primary"].fillna(False).astype(bool)
 
@@ -163,7 +169,6 @@ def load_security_master_issues():
     with get_conn() as conn:
         return pd.read_sql(sql, conn)
 
-
 # --------------------------------------------------
 # ENTERPRISE TASK MONITORING
 # --------------------------------------------------
@@ -183,6 +188,7 @@ def load_task_status():
             FROM encoredb.task_execution_log
             ORDER BY task_name, run_start DESC
         )
+
         SELECT
             r.task_name,
             r.enabled,
@@ -206,21 +212,15 @@ def load_task_status():
     if df.empty:
         return df
 
-    # ---------------------------------------------
-    # Treat DB timestamps as UTC
-    # ---------------------------------------------
-
-    time_cols = ["run_start", "run_end", "last_run_time", "next_run_time"]
-
-    for col in time_cols:
+    for col in ["run_start", "run_end", "last_run_time", "next_run_time"]:
         df[col] = pd.to_datetime(df[col], errors="coerce")
-        df[col] = df[col].dt.tz_localize("UTC")
+        df[col] = (
+            df[col]
+            .dt.tz_localize("America/Chicago", nonexistent="NaT", ambiguous="NaT")
+            .dt.tz_convert("UTC")
+        )
 
-    # ---------------------------------------------
-    # HEALTH LOGIC (IN UTC)
-    # ---------------------------------------------
-
-    now = pd.Timestamp.now(tz="UTC")
+    now = pd.Timestamp.utcnow()
 
     def health(row):
 
@@ -254,17 +254,7 @@ def load_task_status():
         (now - df["run_start"]).dt.total_seconds() / 60
     ).round(1)
 
-    # ---------------------------------------------
-    # CONVERT TO CST FOR DISPLAY ONLY
-    # ---------------------------------------------
-
-    display_tz = "America/Chicago"
-
-    for col in time_cols:
-        df[col] = df[col].dt.tz_convert(display_tz)
-
     return df
-
 
 # --------------------------------------------------
 # UI
@@ -278,21 +268,37 @@ tabs = st.tabs([
     "🖥 Task Monitoring"
 ])
 
+# --------------------------------------------------
+# TAB 1
+# --------------------------------------------------
+
 with tabs[0]:
+
     st.subheader("🚨 Instruments Requiring Attention")
+
     issues = load_security_master_issues()
+
     if issues.empty:
         st.success("✅ All instruments have valid sector & cohort assignments.")
     else:
         st.warning(f"⚠ {len(issues)} instruments require attention")
         st.dataframe(issues, use_container_width=True)
 
+# --------------------------------------------------
+# TAB 2
+# --------------------------------------------------
+
 with tabs[1]:
+
     st.subheader("🏭 Security Master Explorer")
 
     sectors = load_sectors()
     sel_sector = st.selectbox("Select Sector", sectors["sector_name"])
-    sector_id = sectors.loc[sectors["sector_name"] == sel_sector, "sector_id"].iloc[0]
+
+    sector_id = sectors.loc[
+        sectors["sector_name"] == sel_sector,
+        "sector_id"
+    ].iloc[0]
 
     cohorts = load_cohorts(sector_id)
 
@@ -301,7 +307,8 @@ with tabs[1]:
     else:
         sel_cohort = st.selectbox("Select Cohort", cohorts["cohort_name"])
         cohort_id = cohorts.loc[
-            cohorts["cohort_name"] == sel_cohort, "cohort_id"
+            cohorts["cohort_name"] == sel_cohort,
+            "cohort_id"
         ].iloc[0]
 
         instruments = load_instruments_for_cohort(cohort_id)
@@ -311,7 +318,12 @@ with tabs[1]:
         else:
             st.dataframe(instruments, use_container_width=True)
 
+# --------------------------------------------------
+# TAB 3
+# --------------------------------------------------
+
 with tabs[2]:
+
     st.subheader("🖥 Windows Task Monitoring")
 
     tasks = load_task_status()
@@ -319,8 +331,36 @@ with tabs[2]:
     if tasks.empty:
         st.warning("No task executions found.")
     else:
+
+        display_df = tasks.copy()
+
+        # 🔥 UI-ONLY conversion to CST/CDT
+        display_timezone = "America/Chicago"
+
+        time_cols = [
+            "run_start",
+            "run_end",
+            "last_run_time",
+            "next_run_time"
+        ]
+
+        for col in time_cols:
+            if col in display_df.columns:
+                display_df[col] = pd.to_datetime(display_df[col], errors="coerce")
+
+                # If timezone-aware → convert
+                if display_df[col].dt.tz is not None:
+                    display_df[col] = display_df[col].dt.tz_convert(display_timezone)
+                else:
+                    # If naive → assume UTC and convert
+                    display_df[col] = (
+                        display_df[col]
+                        .dt.tz_localize("UTC")
+                        .dt.tz_convert(display_timezone)
+                    )
+
         st.dataframe(
-            tasks[
+            display_df[
                 [
                     "task_name",
                     "health",
@@ -338,6 +378,22 @@ with tabs[2]:
             ],
             use_container_width=True
         )
+        st.markdown(
+            """
+            **Health Definitions**
+            - 🟢 HEALTHY → Windows + Script OK  
+            - 🟢 HEALTHY (WINDOWS) → Windows ran, script not logging  
+            - 🟠 MISSED SCHEDULE → Script logging exists and missed next scheduled run  
+            - 🔴 WINDOWS FAILED → Task Scheduler failure  
+            - 🔴 SCRIPT FAILED → Python execution failure  
+            - 🟡 RUNNING → Currently executing  
+            - ⚪ DISABLED → Disabled in Windows Task Scheduler  
+            """
+        )
+
+# --------------------------------------------------
+# FOOTER
+# --------------------------------------------------
 
 st.caption(
     f"Data as of {date.today().isoformat()} • Encore Internal Monitoring"
