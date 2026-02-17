@@ -822,9 +822,23 @@ elif active_tab == "📈 Price Change Driven":
     .reset_index()
     .pivot(index="move_bucket", columns="time_label", values="names")
     .reindex(index=BUCKET_ORDER, columns=TIME_GRID)
-    .fillna(0)
-    .astype(int)
     )
+
+    # -----------------------------------------
+    # Blank out future time buckets
+    # -----------------------------------------
+
+    from datetime import datetime
+    import pytz
+
+    now_cst = datetime.now(pytz.timezone("US/Central")).strftime("%H:%M")
+
+    for col in bucket_table.columns:
+        if col > now_cst:
+            bucket_table[col] = None
+
+    # Fill remaining NaNs (past times) with 0
+    bucket_table = bucket_table.fillna(0).astype("Int64")
     
     st.dataframe(bucket_table, width="stretch")
 
