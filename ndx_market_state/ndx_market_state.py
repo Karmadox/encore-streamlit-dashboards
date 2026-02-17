@@ -102,6 +102,49 @@ def load_market_state(snapshot_date):
 snapshot_date = load_latest_snapshot_date()
 df = load_market_state(snapshot_date)
 
+df = load_market_state(snapshot_date)
+
+# --------------------------------------------------
+# 🔥 COMBINE GOOG + GOOGL INTO SINGLE ENTRY
+# --------------------------------------------------
+
+goog_mask = df["ticker"].isin(["GOOG", "GOOGL"])
+
+if goog_mask.sum() == 2:
+
+    goog_rows = df[goog_mask].copy()
+
+    total_weight = goog_rows["index_weight_pct"].sum()
+
+    combined_row = goog_rows.iloc[0].copy()
+
+    combined_row["ticker"] = "GOOG/GOOGL"
+    combined_row["index_weight_pct"] = total_weight
+    combined_row["index_rank"] = goog_rows["index_rank"].min()
+
+    # Weighted averages where appropriate
+    weight = goog_rows["index_weight_pct"]
+
+    weighted_avg = lambda col: (goog_rows[col] * weight).sum() / total_weight
+
+    combined_row["last_price"] = weighted_avg("last_price")
+    combined_row["pct_change_1d"] = weighted_avg("pct_change_1d")
+    combined_row["pct_change_5d"] = weighted_avg("pct_change_5d")
+    combined_row["pct_change_1m"] = weighted_avg("pct_change_1m")
+    combined_row["pct_change_ytd"] = weighted_avg("pct_change_ytd")
+    combined_row["pct_from_52w_high"] = weighted_avg("pct_from_52w_high")
+    combined_row["pct_to_best_target"] = weighted_avg("pct_to_best_target")
+    combined_row["best_target_price"] = weighted_avg("best_target_price")
+
+    combined_row["analyst_count"] = goog_rows["analyst_count"].sum()
+    combined_row["days_to_earnings"] = goog_rows["days_to_earnings"].min()
+
+    # Remove originals and append combined
+    df = df[~goog_mask]
+    df = pd.concat([df, pd.DataFrame([combined_row])], ignore_index=True)
+
+    df = df.sort_values("index_rank").reset_index(drop=True)
+
 # --------------------------------------------------
 # HEADER
 # --------------------------------------------------
@@ -245,6 +288,7 @@ display_cols = [
     "index_rank",
     "index_weight_pct",
     "last_price",
+    "best_target_price",      # 🔥 NEW
     "pct_change_1d",
     "pct_change_5d",
     "pct_change_1m",
@@ -262,6 +306,7 @@ styled = (
     .format({
         "index_weight_pct": "{:.3f}",
         "last_price": "{:.2f}",
+        "best_target_price": "{:.2f}",
         "pct_change_1d": "{:.2f}%",
         "pct_change_5d": "{:.2f}%",
         "pct_change_1m": "{:.2f}%",
