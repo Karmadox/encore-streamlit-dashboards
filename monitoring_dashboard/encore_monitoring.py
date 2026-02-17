@@ -59,6 +59,7 @@ def sql_param(x):
         return x.item()
     return x
 
+
 # --------------------------------------------------
 # DATA LOADERS – SECURITY MASTER
 # --------------------------------------------------
@@ -106,7 +107,6 @@ def load_instruments_for_cohort(cohort_id):
             WHERE cohort_id = %s
               AND is_primary = TRUE
         )
-
         SELECT
             i.ticker,
             i.name,
@@ -129,11 +129,7 @@ def load_instruments_for_cohort(cohort_id):
         df = pd.read_sql(
             sql,
             conn,
-            params=(
-                sql_param(cohort_id),
-                sql_param(cohort_id),
-                sql_param(cohort_id),
-            ),
+            params=(cohort_id, cohort_id, cohort_id),
         )
 
     if "is_primary" in df.columns:
@@ -167,6 +163,7 @@ def load_security_master_issues():
     with get_conn() as conn:
         return pd.read_sql(sql, conn)
 
+
 # --------------------------------------------------
 # ENTERPRISE TASK MONITORING
 # --------------------------------------------------
@@ -186,7 +183,6 @@ def load_task_status():
             FROM encoredb.task_execution_log
             ORDER BY task_name, run_start DESC
         )
-
         SELECT
             r.task_name,
             r.enabled,
@@ -210,26 +206,21 @@ def load_task_status():
     if df.empty:
         return df
 
-    # --------------------------------------------------
-    # 🔥 CONVERT UTC → CST FOR DISPLAY ONLY
-    # --------------------------------------------------
+    # ---------------------------------------------
+    # Treat DB timestamps as UTC
+    # ---------------------------------------------
 
-    display_timezone = "America/Chicago"
+    time_cols = ["run_start", "run_end", "last_run_time", "next_run_time"]
 
-    for col in ["run_start", "run_end", "last_run_time", "next_run_time"]:
+    for col in time_cols:
         df[col] = pd.to_datetime(df[col], errors="coerce")
-
-        # Treat DB values as UTC
         df[col] = df[col].dt.tz_localize("UTC")
 
-        # Convert to CST/CDT for UI
-        df[col] = df[col].dt.tz_convert(display_timezone)
+    # ---------------------------------------------
+    # HEALTH LOGIC (IN UTC)
+    # ---------------------------------------------
 
-    # --------------------------------------------------
-    # HEALTH LOGIC (STILL IN UTC)
-    # --------------------------------------------------
-
-    now = pd.Timestamp.utcnow().tz_localize("UTC")
+    now = pd.Timestamp.now(tz="UTC")
 
     def health(row):
 
@@ -248,14 +239,10 @@ def load_task_status():
         if pd.isnull(row["run_start"]) and pd.notnull(row["last_run_time"]):
             return "🟢 HEALTHY (WINDOWS)"
 
-        # Convert back to UTC for safe comparison
-        run_start_utc = row["run_start"].tz_convert("UTC") if pd.notnull(row["run_start"]) else None
-        next_run_utc = row["next_run_time"].tz_convert("UTC") if pd.notnull(row["next_run_time"]) else None
-
-        if run_start_utc and next_run_utc:
+        if pd.notnull(row["run_start"]) and pd.notnull(row["next_run_time"]):
             if (
-                now > next_run_utc + pd.Timedelta(minutes=2)
-                and run_start_utc < next_run_utc
+                now > row["next_run_time"] + pd.Timedelta(minutes=2)
+                and row["run_start"] < row["next_run_time"]
             ):
                 return "🟠 MISSED SCHEDULE"
 
@@ -263,12 +250,21 @@ def load_task_status():
 
     df["health"] = df.apply(health, axis=1)
 
-    # minutes since last run (computed safely in UTC)
     df["minutes_since_last_run"] = (
-        (now - df["run_start"].dt.tz_convert("UTC")).dt.total_seconds() / 60
+        (now - df["run_start"]).dt.total_seconds() / 60
     ).round(1)
 
+    # ---------------------------------------------
+    # CONVERT TO CST FOR DISPLAY ONLY
+    # ---------------------------------------------
+
+    display_tz = "America/Chicago"
+
+    for col in time_cols:
+        df[col] = df[col].dt.tz_convert(display_tz)
+
     return df
+
 
 # --------------------------------------------------
 # UI
@@ -283,11 +279,8 @@ tabs = st.tabs([
 ])
 
 with tabs[0]:
-
     st.subheader("🚨 Instruments Requiring Attention")
-
     issues = load_security_master_issues()
-
     if issues.empty:
         st.success("✅ All instruments have valid sector & cohort assignments.")
     else:
@@ -295,16 +288,11 @@ with tabs[0]:
         st.dataframe(issues, use_container_width=True)
 
 with tabs[1]:
-
     st.subheader("🏭 Security Master Explorer")
 
     sectors = load_sectors()
     sel_sector = st.selectbox("Select Sector", sectors["sector_name"])
-
-    sector_id = sectors.loc[
-        sectors["sector_name"] == sel_sector,
-        "sector_id"
-    ].iloc[0]
+    sector_id = sectors.loc[sectors["sector_name"] == sel_sector, "sector_id"].iloc[0]
 
     cohorts = load_cohorts(sector_id)
 
@@ -313,8 +301,7 @@ with tabs[1]:
     else:
         sel_cohort = st.selectbox("Select Cohort", cohorts["cohort_name"])
         cohort_id = cohorts.loc[
-            cohorts["cohort_name"] == sel_cohort,
-            "cohort_id"
+            cohorts["cohort_name"] == sel_cohort, "cohort_id"
         ].iloc[0]
 
         instruments = load_instruments_for_cohort(cohort_id)
@@ -325,7 +312,6 @@ with tabs[1]:
             st.dataframe(instruments, use_container_width=True)
 
 with tabs[2]:
-
     st.subheader("🖥 Windows Task Monitoring")
 
     tasks = load_task_status()
