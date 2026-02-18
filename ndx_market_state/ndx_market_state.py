@@ -82,7 +82,8 @@ def load_positions():
     sql = """
         SELECT
             ticker,
-            SUM(quantity) AS quantity
+            SUM(quantity) AS quantity,
+            AVG(price) AS price
         FROM encoredb.positions_snapshot_latest
         GROUP BY ticker
     """
@@ -103,51 +104,44 @@ positions = load_positions()
 # --------------------------------------------------
 
 df = df.merge(
-    positions,
+    positions[["ticker", "quantity"]],
     on="ticker",
     how="left"
 )
 
 df["quantity"] = df["quantity"].fillna(0)
 
-# Real dollar value
 df["real_value"] = df["quantity"] * df["last_price"]
 
 # --------------------------------------------------
-# 🔥 SYNTHETIC NQH6 POSITION (USING CONTRACT QUANTITY)
+# 🔥 SYNTHETIC NQH6 FUTURES OVERLAY
 # --------------------------------------------------
 
 NQ_MULTIPLIER = 20
 
-nq_position = positions[positions["ticker"] == "NQH6"]
+nq_row = positions[positions["ticker"] == "NQH6"]
 
 synthetic_index_notional = 0
 
-if not nq_position.empty:
+if not nq_row.empty:
 
-    nq_contracts = nq_position["quantity"].iloc[0]  # e.g. -70
+    nq_contracts = nq_row["quantity"].iloc[0]      # e.g. -70
+    nq_price = nq_row["price"].iloc[0]             # futures price
 
-    # Use NQ last price from market snapshot
-    nq_row = df[df["ticker"] == "NQ1 Index"]
+    synthetic_index_notional = nq_contracts * nq_price * NQ_MULTIPLIER
 
-    if not nq_row.empty:
-        nq_price = nq_row["last_price"].iloc[0]
-        synthetic_index_notional = nq_contracts * nq_price * NQ_MULTIPLIER
-
-# Convert weight % to decimal
+# Convert weight to decimal
 df["weight_decimal"] = df["index_weight_pct"] / 100
 
-# Apportioned synthetic dollar exposure
+# Allocate synthetic exposure
 df["synthetic_value"] = df["weight_decimal"] * synthetic_index_notional
-
-# Synthetic share equivalent
 df["synthetic_quantity"] = df["synthetic_value"] / df["last_price"]
 
-df["synthetic_quantity"] = df["synthetic_quantity"].fillna(0)
 df["synthetic_value"] = df["synthetic_value"].fillna(0)
+df["synthetic_quantity"] = df["synthetic_quantity"].fillna(0)
 
 # --------------------------------------------------
-# NET POSITION (REAL – SYNTHETIC)
+# NET POSITION
 # --------------------------------------------------
 
 df["net_position_value"] = df["real_value"] - df["synthetic_value"]
