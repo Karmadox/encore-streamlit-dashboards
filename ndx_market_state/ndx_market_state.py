@@ -153,6 +153,42 @@ st.title("📈 Nasdaq-100 — Market State")
 st.caption(f"As of end of day: {snapshot_date.strftime('%d %b %Y')}")
 
 # --------------------------------------------------
+# SYNTHETIC POSITION DISCLOSURE
+# --------------------------------------------------
+
+if not nq_row.empty and nq_index_level is not None:
+
+    nq_contracts = nq_row["quantity"].iloc[0]
+    total_synth = synthetic_index_notional
+
+    direction = "Short" if nq_contracts < 0 else "Long"
+
+    st.markdown(
+        f"""
+### 🧮 Synthetic Hedge Overlay
+
+We are currently **{direction} {abs(int(nq_contracts))} NQH6 futures contracts**.
+
+- **Nasdaq-100 index level used:** {nq_index_level:,.2f}  
+- **Contract multiplier:** {NQ_MULTIPLIER}  
+- **Total synthetic notional exposure:** {total_synth:,.0f}  
+
+This synthetic exposure is apportioned across all 100 constituents 
+based on their index weight, generating a stock-level hedge overlay.
+"""
+    )
+
+else:
+
+    st.markdown(
+        """
+### 🧮 Synthetic Hedge Overlay
+
+No active NQH6 futures position detected.
+"""
+    )
+    
+# --------------------------------------------------
 # HOW TO READ
 # --------------------------------------------------
 
