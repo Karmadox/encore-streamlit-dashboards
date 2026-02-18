@@ -42,17 +42,13 @@ st.set_page_config(
     layout="wide",
 )
 
-# --------------------------------------------------
-# DB CONFIG
-# --------------------------------------------------
-
 DB_CONFIG = st.secrets["db"]
 
 def get_conn():
     return psycopg2.connect(**DB_CONFIG)
 
 # --------------------------------------------------
-# DATA LOADERS
+# LOADERS
 # --------------------------------------------------
 
 @st.cache_data(ttl=300)
@@ -99,6 +95,13 @@ snapshot_date = load_latest_snapshot_date()
 df = load_market_state(snapshot_date)
 positions = load_positions()
 
+# Ensure numeric types
+positions["quantity"] = pd.to_numeric(positions["quantity"], errors="coerce")
+positions["price"] = pd.to_numeric(positions["price"], errors="coerce")
+
+df["last_price"] = pd.to_numeric(df["last_price"], errors="coerce")
+df["index_weight_pct"] = pd.to_numeric(df["index_weight_pct"], errors="coerce")
+
 # --------------------------------------------------
 # MERGE REAL EQUITY POSITIONS
 # --------------------------------------------------
@@ -114,21 +117,22 @@ df["quantity"] = df["quantity"].fillna(0)
 df["real_value"] = df["quantity"] * df["last_price"]
 
 # --------------------------------------------------
-# 🔥 SYNTHETIC NQH6 FUTURES OVERLAY
+# SYNTHETIC NQH6 FUTURES OVERLAY
 # --------------------------------------------------
 
 NQ_MULTIPLIER = 20
 
-nq_row = positions[positions["ticker"] == "NQH6"]
-
 synthetic_index_notional = 0
+
+nq_row = positions[positions["ticker"] == "NQH6"]
 
 if not nq_row.empty:
 
-    nq_contracts = nq_row["quantity"].iloc[0]      # e.g. -70
-    nq_price = nq_row["price"].iloc[0]             # futures price
+    nq_contracts = nq_row["quantity"].iloc[0]
+    nq_price = nq_row["price"].iloc[0]
 
-    synthetic_index_notional = nq_contracts * nq_price * NQ_MULTIPLIER
+    if pd.notna(nq_contracts) and pd.notna(nq_price):
+        synthetic_index_notional = nq_contracts * nq_price * NQ_MULTIPLIER
 
 # Convert weight to decimal
 df["weight_decimal"] = df["index_weight_pct"] / 100
@@ -178,15 +182,11 @@ if goog_mask.sum() == 2:
     df = df.sort_values("index_rank").reset_index(drop=True)
 
 # --------------------------------------------------
-# HEADER
+# DISPLAY
 # --------------------------------------------------
 
 st.title("📈 Nasdaq-100 — Market State")
 st.caption(f"As of end of day: {snapshot_date.strftime('%d %b %Y')}")
-
-# --------------------------------------------------
-# MAIN TABLE
-# --------------------------------------------------
 
 st.subheader("📋 Canonical Market State + Synthetic Futures Overlay")
 
@@ -217,10 +217,6 @@ styled = (
 )
 
 st.dataframe(styled, use_container_width=True)
-
-# --------------------------------------------------
-# FOOTER
-# --------------------------------------------------
 
 st.caption(
     f"Encore Analytics • Nasdaq-100 Market State • Generated {date.today().isoformat()}"
