@@ -120,7 +120,7 @@ df["synthetic_quantity"] = df["synthetic_value"] / df["last_price"]
 
 df["synthetic_value"] = df["synthetic_value"].fillna(0)
 df["synthetic_quantity"] = df["synthetic_quantity"].fillna(0)
-df["net_position_value"] = df["real_value"] - df["synthetic_value"]
+df["net_position_value"] = df["real_value"] + df["synthetic_value"]
 
 # --------------------------------------------------
 # COMBINE GOOG + GOOGL
@@ -187,7 +187,7 @@ else:
 No active NQH6 futures position detected.
 """
     )
-    
+
 # --------------------------------------------------
 # HOW TO READ
 # --------------------------------------------------
