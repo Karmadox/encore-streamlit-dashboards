@@ -8,7 +8,6 @@ from datetime import date
 # -------------------------------------------------
 
 def check_password():
-
     def password_entered():
         if st.session_state["password"] == st.secrets["auth"]["password"]:
             st.session_state["authenticated"] = True
@@ -19,16 +18,13 @@ def check_password():
         st.text_input("Enter Password", type="password", key="password")
         st.button("Login", on_click=password_entered)
         return False
-
     elif not st.session_state["authenticated"]:
         st.text_input("Enter Password", type="password", key="password")
         st.button("Login", on_click=password_entered)
         st.error("Incorrect password")
         return False
-
     else:
         return True
-
 
 if not check_password():
     st.stop()
@@ -37,10 +33,7 @@ if not check_password():
 # PAGE CONFIG
 # --------------------------------------------------
 
-st.set_page_config(
-    page_title="Nasdaq-100 Market State",
-    layout="wide",
-)
+st.set_page_config(page_title="Nasdaq-100 Market State", layout="wide")
 
 DB_CONFIG = st.secrets["db"]
 
@@ -53,13 +46,9 @@ def get_conn():
 
 @st.cache_data(ttl=300)
 def load_latest_snapshot_date():
-    sql = """
-        SELECT MAX(snapshot_date) AS snapshot_date
-        FROM encoredb.ndx_market_snapshot
-    """
+    sql = "SELECT MAX(snapshot_date) FROM encoredb.ndx_market_snapshot"
     with get_conn() as conn:
-        return pd.read_sql(sql, conn)["snapshot_date"].iloc[0]
-
+        return pd.read_sql(sql, conn).iloc[0, 0]
 
 @st.cache_data(ttl=300)
 def load_market_state(snapshot_date):
@@ -72,19 +61,30 @@ def load_market_state(snapshot_date):
     with get_conn() as conn:
         return pd.read_sql(sql, conn, params=(snapshot_date,))
 
-
 @st.cache_data(ttl=60)
 def load_positions():
     sql = """
-        SELECT
-            ticker,
-            SUM(quantity) AS quantity
+        SELECT ticker, SUM(quantity) AS quantity
         FROM encoredb.positions_snapshot_latest
         GROUP BY ticker
     """
     with get_conn() as conn:
         return pd.read_sql(sql, conn)
 
+@st.cache_data(ttl=60)
+def load_nq_index_level():
+    sql = """
+        SELECT close
+        FROM encoredb.marketdata_intraday
+        WHERE security = 'NQ1 Index'
+        ORDER BY timestamp DESC
+        LIMIT 1
+    """
+    with get_conn() as conn:
+        df = pd.read_sql(sql, conn)
+        if df.empty:
+            return None
+        return df["close"].iloc[0]
 
 # --------------------------------------------------
 # LOAD DATA
@@ -93,50 +93,31 @@ def load_positions():
 snapshot_date = load_latest_snapshot_date()
 df = load_market_state(snapshot_date)
 positions = load_positions()
-
-# Ensure numeric
-df["last_price"] = pd.to_numeric(df["last_price"], errors="coerce")
-df["index_weight_pct"] = pd.to_numeric(df["index_weight_pct"], errors="coerce")
-positions["quantity"] = pd.to_numeric(positions["quantity"], errors="coerce")
+nq_index_level = load_nq_index_level()
 
 # --------------------------------------------------
-# MERGE REAL POSITIONS
+# MERGE REAL EQUITY POSITIONS
 # --------------------------------------------------
 
-df = df.merge(
-    positions,
-    on="ticker",
-    how="left"
-)
-
+df = df.merge(positions, on="ticker", how="left")
 df["quantity"] = df["quantity"].fillna(0)
 df["real_value"] = df["quantity"] * df["last_price"]
 
 # --------------------------------------------------
-# SYNTHETIC NQH6 FUTURES OVERLAY
+# SYNTHETIC FUTURES OVERLAY
 # --------------------------------------------------
 
 NQ_MULTIPLIER = 20
 synthetic_index_notional = 0
 
-# 1️⃣ Get futures quantity (–70)
-nq_row = positions[positions["ticker"] == "NQH6"]
+nq_row = positions[positions["ticker"].str.contains("NQH6", na=False)]
 
-# 2️⃣ Get Nasdaq index level from market snapshot
-ndx_row = df[df["ticker"] == "NQ1 Index"]
-
-if not nq_row.empty and not ndx_row.empty:
-
+if not nq_row.empty and nq_index_level is not None:
     nq_contracts = nq_row["quantity"].iloc[0]
-    ndx_level = ndx_row["last_price"].iloc[0]
+    synthetic_index_notional = nq_contracts * nq_index_level * NQ_MULTIPLIER
 
-    if pd.notna(nq_contracts) and pd.notna(ndx_level):
-        synthetic_index_notional = nq_contracts * ndx_level * NQ_MULTIPLIER
-
-# Convert weight %
+# Allocate across constituents
 df["weight_decimal"] = df["index_weight_pct"] / 100
-
-# Allocate synthetic exposure
 df["synthetic_value"] = df["weight_decimal"] * synthetic_index_notional
 df["synthetic_quantity"] = df["synthetic_value"] / df["last_price"]
 
@@ -150,43 +131,15 @@ df["synthetic_quantity"] = df["synthetic_quantity"].fillna(0)
 df["net_position_value"] = df["real_value"] - df["synthetic_value"]
 
 # --------------------------------------------------
-# COMBINE GOOG + GOOGL
-# --------------------------------------------------
-
-goog_mask = df["ticker"].isin(["GOOG", "GOOGL"])
-
-if goog_mask.sum() == 2:
-
-    goog_rows = df[goog_mask].copy()
-    combined = goog_rows.iloc[0].copy()
-    combined["ticker"] = "GOOG/GOOGL"
-
-    numeric_cols = [
-        "index_weight_pct",
-        "real_value",
-        "synthetic_value",
-        "net_position_value",
-        "quantity",
-        "synthetic_quantity",
-    ]
-
-    for col in numeric_cols:
-        combined[col] = goog_rows[col].sum()
-
-    combined["index_rank"] = goog_rows["index_rank"].min()
-
-    df = df[~goog_mask]
-    df = pd.concat([df, pd.DataFrame([combined])], ignore_index=True)
-    df = df.sort_values("index_rank").reset_index(drop=True)
-
-# --------------------------------------------------
-# DISPLAY
+# HEADER
 # --------------------------------------------------
 
 st.title("📈 Nasdaq-100 — Market State")
 st.caption(f"As of end of day: {snapshot_date.strftime('%d %b %Y')}")
 
-st.subheader("📋 Canonical Market State + Synthetic Futures Overlay")
+# --------------------------------------------------
+# TABLE
+# --------------------------------------------------
 
 display_cols = [
     "ticker",
