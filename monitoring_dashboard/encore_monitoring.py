@@ -228,6 +228,8 @@ def load_task_status():
             return "⚪ DISABLED"
 
         if row["last_task_result"] not in (0, None):
+            if row["status"] == "SUCCESS":
+                return "🟢 HEALTHY"
             return "🔴 WINDOWS FAILED"
 
         if row["status"] == "FAILED":
