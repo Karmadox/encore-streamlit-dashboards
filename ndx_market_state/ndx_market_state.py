@@ -120,6 +120,8 @@ df["synthetic_quantity"] = df["synthetic_value"] / df["last_price"]
 
 df["synthetic_value"] = df["synthetic_value"].fillna(0)
 df["synthetic_quantity"] = df["synthetic_quantity"].fillna(0)
+
+# IMPORTANT: additive logic (corrected earlier)
 df["net_position_value"] = df["real_value"] + df["synthetic_value"]
 
 # --------------------------------------------------
@@ -133,14 +135,18 @@ if goog_mask.sum() == 2:
     combined["ticker"] = "GOOG/GOOGL"
 
     sum_cols = [
-        "index_weight_pct", "real_value",
-        "synthetic_value", "net_position_value",
-        "quantity", "synthetic_quantity"
+        "index_weight_pct",
+        "real_value",
+        "synthetic_value",
+        "net_position_value",
+        "quantity",
+        "synthetic_quantity"
     ]
     for col in sum_cols:
         combined[col] = goog_rows[col].sum()
 
     combined["index_rank"] = goog_rows["index_rank"].min()
+
     df = df[~goog_mask]
     df = pd.concat([df, pd.DataFrame([combined])], ignore_index=True)
     df = df.sort_values("index_rank").reset_index(drop=True)
@@ -152,89 +158,13 @@ if goog_mask.sum() == 2:
 st.title("📈 Nasdaq-100 — Market State")
 st.caption(f"As of end of day: {snapshot_date.strftime('%d %b %Y')}")
 
-# --------------------------------------------------
-# SYNTHETIC POSITION DISCLOSURE
-# --------------------------------------------------
-
-if not nq_row.empty and nq_index_level is not None:
-
-    nq_contracts = nq_row["quantity"].iloc[0]
-    total_synth = synthetic_index_notional
-
-    direction = "Short" if nq_contracts < 0 else "Long"
-
-    st.markdown(
-        f"""
-### 🧮 Synthetic Hedge Overlay
-
-We are currently **{direction} {abs(int(nq_contracts))} NQH6 futures contracts**.
-
-- **Nasdaq-100 index level used:** {nq_index_level:,.2f}  
-- **Contract multiplier:** {NQ_MULTIPLIER}  
-- **Total synthetic notional exposure:** {total_synth:,.0f}  
-
-This synthetic exposure is apportioned across all 100 constituents 
-based on their index weight, generating a stock-level hedge overlay.
-"""
-    )
-
-else:
-
-    st.markdown(
-        """
-### 🧮 Synthetic Hedge Overlay
-
-No active NQH6 futures position detected.
-"""
-    )
-
-# --------------------------------------------------
-# HOW TO READ
-# --------------------------------------------------
-
-with st.expander("ℹ️ How to read this chart"):
-    st.markdown("""
-This dashboard combines:
-
-• Index structure  
-• Momentum & analyst expectations  
-• Real portfolio exposure  
-• Synthetic NQ futures overlay  
-• Net instrument-level exposure  
-
-**Net Position = Real Equity − Synthetic Futures Allocation**
-""")
-
-st.divider()
-
-# --------------------------------------------------
-# GLOBAL METRICS
-# --------------------------------------------------
-
-top5_weight = df.loc[df["index_rank"] <= 5, "index_weight_pct"].sum()
-top10_weight = df.loc[df["index_rank"] <= 10, "index_weight_pct"].sum()
-pct_near_high = (df["pct_from_52w_high"] >= -10).mean() * 100
-earnings_14d = df["days_to_earnings"].between(0,14).sum()
-
-total_real = df["real_value"].sum()
-total_synth = df["synthetic_value"].sum()
-total_net = df["net_position_value"].sum()
-
-c1,c2,c3,c4,c5,c6 = st.columns(6)
-c1.metric("Top 5 weight", f"{top5_weight:.1f}%")
-c2.metric("Top 10 weight", f"{top10_weight:.1f}%")
-c3.metric("% within 10% of high", f"{pct_near_high:.0f}%")
-c4.metric("Earnings ≤14d", earnings_14d)
-c5.metric("Real Exposure", f"{total_real:,.0f}")
-c6.metric("Net Exposure", f"{total_net:,.0f}")
-
 st.divider()
 
 # --------------------------------------------------
 # FILTERS
 # --------------------------------------------------
 
-col1,col2,col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     role_filter = st.multiselect(
@@ -243,12 +173,15 @@ with col1:
     )
 
 with col2:
-    max_rank = st.slider(
-        "Show top N constituents",
-        1,101,101
+    cohort_filter = st.multiselect(
+        "Cohort",
+        sorted(df["cohort_name"].dropna().unique())
     )
 
 with col3:
+    max_rank = st.slider("Show top N constituents", 1, 101, 101)
+
+with col4:
     earnings_filter = st.checkbox("Only earnings ≤14 days")
 
 filtered = df.copy()
@@ -256,10 +189,13 @@ filtered = df.copy()
 if role_filter:
     filtered = filtered[filtered["role_bucket"].isin(role_filter)]
 
+if cohort_filter:
+    filtered = filtered[filtered["cohort_name"].isin(cohort_filter)]
+
 filtered = filtered[filtered["index_rank"] <= max_rank]
 
 if earnings_filter:
-    filtered = filtered[filtered["days_to_earnings"].between(0,14)]
+    filtered = filtered[filtered["days_to_earnings"].between(0, 14)]
 
 # --------------------------------------------------
 # MAIN TABLE
@@ -299,35 +235,19 @@ st.dataframe(
 )
 
 # --------------------------------------------------
-# ROLE SUMMARY
+# FILTERED TOTALS (NEW)
 # --------------------------------------------------
 
-st.divider()
-st.subheader("🧩 Role-Level Summary")
+st.markdown("### 📊 Selected Totals")
 
-role_summary = (
-    filtered.groupby("role_bucket", dropna=False)
-    .agg(
-        total_weight=("index_weight_pct","sum"),
-        real_exposure=("real_value","sum"),
-        synthetic_exposure=("synthetic_value","sum"),
-        net_exposure=("net_position_value","sum"),
-        median_upside=("pct_to_best_target","median")
-    )
-    .reset_index()
-    .sort_values("total_weight",ascending=False)
-)
+total_real_filtered = filtered["real_value"].sum()
+total_synth_filtered = filtered["synthetic_value"].sum()
+total_net_filtered = filtered["net_position_value"].sum()
 
-st.dataframe(
-    role_summary.style.format({
-        "total_weight":"{:.2f}%",
-        "real_exposure":"{:,.0f}",
-        "synthetic_exposure":"{:,.0f}",
-        "net_exposure":"{:,.0f}",
-        "median_upside":"{:.2f}%"
-    }),
-    use_container_width=True
-)
+c1, c2, c3 = st.columns(3)
+c1.metric("Real Exposure (Selected)", f"{total_real_filtered:,.0f}")
+c2.metric("Synthetic Exposure (Selected)", f"{total_synth_filtered:,.0f}")
+c3.metric("Net Exposure (Selected)", f"{total_net_filtered:,.0f}")
 
 # --------------------------------------------------
 # FOOTER
