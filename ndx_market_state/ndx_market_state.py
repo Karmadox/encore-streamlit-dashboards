@@ -48,7 +48,7 @@ def get_conn():
     return psycopg2.connect(**DB_CONFIG)
 
 # --------------------------------------------------
-# LOADERS
+# DATA LOADERS
 # --------------------------------------------------
 
 @st.cache_data(ttl=300)
@@ -78,8 +78,7 @@ def load_positions():
     sql = """
         SELECT
             ticker,
-            SUM(quantity) AS quantity,
-            AVG(price) AS price
+            SUM(quantity) AS quantity
         FROM encoredb.positions_snapshot_latest
         GROUP BY ticker
     """
@@ -95,25 +94,22 @@ snapshot_date = load_latest_snapshot_date()
 df = load_market_state(snapshot_date)
 positions = load_positions()
 
-# Ensure numeric types
-positions["quantity"] = pd.to_numeric(positions["quantity"], errors="coerce")
-positions["price"] = pd.to_numeric(positions["price"], errors="coerce")
-
+# Ensure numeric
 df["last_price"] = pd.to_numeric(df["last_price"], errors="coerce")
 df["index_weight_pct"] = pd.to_numeric(df["index_weight_pct"], errors="coerce")
+positions["quantity"] = pd.to_numeric(positions["quantity"], errors="coerce")
 
 # --------------------------------------------------
-# MERGE REAL EQUITY POSITIONS
+# MERGE REAL POSITIONS
 # --------------------------------------------------
 
 df = df.merge(
-    positions[["ticker", "quantity"]],
+    positions,
     on="ticker",
     how="left"
 )
 
 df["quantity"] = df["quantity"].fillna(0)
-
 df["real_value"] = df["quantity"] * df["last_price"]
 
 # --------------------------------------------------
@@ -121,20 +117,23 @@ df["real_value"] = df["quantity"] * df["last_price"]
 # --------------------------------------------------
 
 NQ_MULTIPLIER = 20
-
 synthetic_index_notional = 0
 
+# 1️⃣ Get futures quantity (–70)
 nq_row = positions[positions["ticker"] == "NQH6"]
 
-if not nq_row.empty:
+# 2️⃣ Get Nasdaq index level from market snapshot
+ndx_row = df[df["ticker"] == "NQ1 Index"]
+
+if not nq_row.empty and not ndx_row.empty:
 
     nq_contracts = nq_row["quantity"].iloc[0]
-    nq_price = nq_row["price"].iloc[0]
+    ndx_level = ndx_row["last_price"].iloc[0]
 
-    if pd.notna(nq_contracts) and pd.notna(nq_price):
-        synthetic_index_notional = nq_contracts * nq_price * NQ_MULTIPLIER
+    if pd.notna(nq_contracts) and pd.notna(ndx_level):
+        synthetic_index_notional = nq_contracts * ndx_level * NQ_MULTIPLIER
 
-# Convert weight to decimal
+# Convert weight %
 df["weight_decimal"] = df["index_weight_pct"] / 100
 
 # Allocate synthetic exposure
@@ -160,7 +159,6 @@ if goog_mask.sum() == 2:
 
     goog_rows = df[goog_mask].copy()
     combined = goog_rows.iloc[0].copy()
-
     combined["ticker"] = "GOOG/GOOGL"
 
     numeric_cols = [
