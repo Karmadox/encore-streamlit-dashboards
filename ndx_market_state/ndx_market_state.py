@@ -68,27 +68,7 @@ def load_latest_snapshot_date():
 @st.cache_data(ttl=300)
 def load_market_state(snapshot_date):
     sql = """
-        SELECT
-            snapshot_date,
-            ticker,
-            sector_name,
-            cohort_name,
-            role_bucket,
-            index_rank,
-            index_weight_pct,
-            cumulative_weight_pct,
-            last_price,
-            pct_change_1d,
-            pct_change_5d,
-            pct_change_1m,
-            pct_change_ytd,
-            pct_from_52w_high,
-            best_target_price,
-            pct_to_best_target,
-            analyst_count,
-            best_analyst_rating,
-            next_earnings_date,
-            days_to_earnings
+        SELECT *
         FROM encoredb.v_ndx_canonical_market_state_enriched
         WHERE snapshot_date = %s
         ORDER BY index_rank
@@ -102,12 +82,13 @@ def load_positions():
     sql = """
         SELECT
             ticker,
-            SUM(quantity) AS notional_quantity
+            SUM(quantity) AS quantity
         FROM encoredb.positions_snapshot_latest
         GROUP BY ticker
     """
     with get_conn() as conn:
         return pd.read_sql(sql, conn)
+
 
 # --------------------------------------------------
 # LOAD DATA
@@ -115,25 +96,64 @@ def load_positions():
 
 snapshot_date = load_latest_snapshot_date()
 df = load_market_state(snapshot_date)
-positions_df = load_positions()
+positions = load_positions()
 
 # --------------------------------------------------
-# 🔥 MERGE POSITIONS
+# MERGE REAL EQUITY POSITIONS
 # --------------------------------------------------
 
 df = df.merge(
-    positions_df,
+    positions,
     on="ticker",
     how="left"
 )
 
-df["notional_quantity"] = df["notional_quantity"].fillna(0)
+df["quantity"] = df["quantity"].fillna(0)
 
-# Latest value = quantity × last_price
-df["latest_value"] = df["notional_quantity"] * df["last_price"]
+# Real dollar value
+df["real_value"] = df["quantity"] * df["last_price"]
 
 # --------------------------------------------------
-# 🔥 COMBINE GOOG + GOOGL
+# 🔥 SYNTHETIC NQH6 POSITION (USING CONTRACT QUANTITY)
+# --------------------------------------------------
+
+NQ_MULTIPLIER = 20
+
+nq_position = positions[positions["ticker"] == "NQH6"]
+
+synthetic_index_notional = 0
+
+if not nq_position.empty:
+
+    nq_contracts = nq_position["quantity"].iloc[0]  # e.g. -70
+
+    # Use NQ last price from market snapshot
+    nq_row = df[df["ticker"] == "NQ1 Index"]
+
+    if not nq_row.empty:
+        nq_price = nq_row["last_price"].iloc[0]
+        synthetic_index_notional = nq_contracts * nq_price * NQ_MULTIPLIER
+
+# Convert weight % to decimal
+df["weight_decimal"] = df["index_weight_pct"] / 100
+
+# Apportioned synthetic dollar exposure
+df["synthetic_value"] = df["weight_decimal"] * synthetic_index_notional
+
+# Synthetic share equivalent
+df["synthetic_quantity"] = df["synthetic_value"] / df["last_price"]
+
+df["synthetic_quantity"] = df["synthetic_quantity"].fillna(0)
+df["synthetic_value"] = df["synthetic_value"].fillna(0)
+
+# --------------------------------------------------
+# NET POSITION (REAL – SYNTHETIC)
+# --------------------------------------------------
+
+df["net_position_value"] = df["real_value"] - df["synthetic_value"]
+
+# --------------------------------------------------
+# COMBINE GOOG + GOOGL
 # --------------------------------------------------
 
 goog_mask = df["ticker"].isin(["GOOG", "GOOGL"])
@@ -141,37 +161,26 @@ goog_mask = df["ticker"].isin(["GOOG", "GOOGL"])
 if goog_mask.sum() == 2:
 
     goog_rows = df[goog_mask].copy()
-    total_weight = goog_rows["index_weight_pct"].sum()
+    combined = goog_rows.iloc[0].copy()
 
-    combined_row = goog_rows.iloc[0].copy()
-    combined_row["ticker"] = "GOOG/GOOGL"
-    combined_row["index_weight_pct"] = total_weight
-    combined_row["index_rank"] = goog_rows["index_rank"].min()
+    combined["ticker"] = "GOOG/GOOGL"
 
-    weight = goog_rows["index_weight_pct"]
-    weighted_avg = lambda col: (goog_rows[col] * weight).sum() / total_weight
+    numeric_cols = [
+        "index_weight_pct",
+        "real_value",
+        "synthetic_value",
+        "net_position_value",
+        "quantity",
+        "synthetic_quantity",
+    ]
 
-    for col in [
-        "last_price",
-        "pct_change_1d",
-        "pct_change_5d",
-        "pct_change_1m",
-        "pct_change_ytd",
-        "pct_from_52w_high",
-        "pct_to_best_target",
-        "best_target_price",
-    ]:
-        combined_row[col] = weighted_avg(col)
+    for col in numeric_cols:
+        combined[col] = goog_rows[col].sum()
 
-    combined_row["analyst_count"] = goog_rows["analyst_count"].sum()
-    combined_row["days_to_earnings"] = goog_rows["days_to_earnings"].min()
-
-    # 🔥 combine positions too
-    combined_row["notional_quantity"] = goog_rows["notional_quantity"].sum()
-    combined_row["latest_value"] = combined_row["notional_quantity"] * combined_row["last_price"]
+    combined["index_rank"] = goog_rows["index_rank"].min()
 
     df = df[~goog_mask]
-    df = pd.concat([df, pd.DataFrame([combined_row])], ignore_index=True)
+    df = pd.concat([df, pd.DataFrame([combined])], ignore_index=True)
     df = df.sort_values("index_rank").reset_index(drop=True)
 
 # --------------------------------------------------
@@ -181,34 +190,22 @@ if goog_mask.sum() == 2:
 st.title("📈 Nasdaq-100 — Market State")
 st.caption(f"As of end of day: {snapshot_date.strftime('%d %b %Y')}")
 
-st.divider()
-
 # --------------------------------------------------
 # MAIN TABLE
 # --------------------------------------------------
 
-st.subheader("📋 Canonical Market State")
+st.subheader("📋 Canonical Market State + Synthetic Futures Overlay")
 
 display_cols = [
     "ticker",
-    "sector_name",
-    "cohort_name",
-    "role_bucket",
     "index_rank",
     "index_weight_pct",
-    "notional_quantity",      # 🔥 NEW
     "last_price",
-    "latest_value",           # 🔥 NEW
-    "best_target_price",
-    "pct_change_1d",
-    "pct_change_5d",
-    "pct_change_1m",
-    "pct_change_ytd",
-    "pct_from_52w_high",
-    "pct_to_best_target",
-    "analyst_count",
-    "best_analyst_rating",
-    "days_to_earnings",
+    "quantity",
+    "real_value",
+    "synthetic_quantity",
+    "synthetic_value",
+    "net_position_value",
 ]
 
 styled = (
@@ -216,16 +213,12 @@ styled = (
     .style
     .format({
         "index_weight_pct": "{:.3f}",
-        "notional_quantity": "{:,.0f}",
         "last_price": "{:.2f}",
-        "latest_value": "{:,.0f}",
-        "best_target_price": "{:.2f}",
-        "pct_change_1d": "{:.2f}%",
-        "pct_change_5d": "{:.2f}%",
-        "pct_change_1m": "{:.2f}%",
-        "pct_change_ytd": "{:.2f}%",
-        "pct_from_52w_high": "{:.2f}%",
-        "pct_to_best_target": "{:+.1f}%",
+        "quantity": "{:,.0f}",
+        "real_value": "{:,.0f}",
+        "synthetic_quantity": "{:,.2f}",
+        "synthetic_value": "{:,.0f}",
+        "net_position_value": "{:,.0f}",
     })
 )
 
