@@ -105,7 +105,10 @@ revisions = load_revisions(snapshot_date)
 positions = load_positions()
 nq_index_level = load_nq_index_level()
 
-# Merge revisions
+# --------------------------------------------------
+# MERGE REVISIONS
+# --------------------------------------------------
+
 df = df.merge(revisions, on="ticker", how="left")
 
 # --------------------------------------------------
@@ -113,11 +116,10 @@ df = df.merge(revisions, on="ticker", how="left")
 # --------------------------------------------------
 
 def revision_signal(row):
-
     breadth = row.get("revision_breadth_1m")
     delta = row.get("target_delta_1m_pct")
 
-    if pd.isna(breadth):
+    if pd.isna(breadth) or pd.isna(delta):
         return ""
 
     if breadth > 0.3 and delta > 3:
@@ -193,11 +195,66 @@ Combines:
 • 🔴⬇⬇ → Broad and strong negative revisions  
 • 🔴⬇ → Mild negative revision trend  
 
-Breadth measures how many analysts are revising up vs down.  
-Target delta measures magnitude of target change.
+Breadth = (Up − Down) / Analyst Count  
+Target delta = % change in consensus target over 1M
 """)
 
 st.divider()
+
+# --------------------------------------------------
+# GLOBAL METRICS (RESTORED)
+# --------------------------------------------------
+
+top5_weight = df.loc[df["index_rank"] <= 5, "index_weight_pct"].sum()
+top10_weight = df.loc[df["index_rank"] <= 10, "index_weight_pct"].sum()
+pct_near_high = (df["pct_from_52w_high"] >= -10).mean() * 100
+earnings_14d = df["days_to_earnings"].between(0,14).sum()
+
+total_real = df["real_value"].sum()
+total_synth = df["synthetic_value"].sum()
+total_net = df["net_position_value"].sum()
+
+c1,c2,c3,c4,c5,c6 = st.columns(6)
+c1.metric("Top 5 weight", f"{top5_weight:.1f}%")
+c2.metric("Top 10 weight", f"{top10_weight:.1f}%")
+c3.metric("% within 10% of high", f"{pct_near_high:.0f}%")
+c4.metric("Earnings ≤14d", earnings_14d)
+c5.metric("Real Exposure", f"{total_real:,.0f}")
+c6.metric("Net Exposure", f"{total_net:,.0f}")
+
+st.divider()
+
+# --------------------------------------------------
+# FILTERS (RESTORED)
+# --------------------------------------------------
+
+col1,col2,col3,col4 = st.columns(4)
+
+with col1:
+    role_filter = st.multiselect("Role bucket",
+        sorted(df["role_bucket"].dropna().unique()))
+
+with col2:
+    cohort_filter = st.multiselect("Cohort",
+        sorted(df["cohort_name"].dropna().unique()))
+
+with col3:
+    max_rank = st.slider("Show top N constituents",1,101,101)
+
+with col4:
+    earnings_filter = st.checkbox("Only earnings ≤14 days")
+
+filtered = df.copy()
+
+if role_filter:
+    filtered = filtered[filtered["role_bucket"].isin(role_filter)]
+if cohort_filter:
+    filtered = filtered[filtered["cohort_name"].isin(cohort_filter)]
+
+filtered = filtered[filtered["index_rank"] <= max_rank]
+
+if earnings_filter:
+    filtered = filtered[filtered["days_to_earnings"].between(0,14)]
 
 # --------------------------------------------------
 # MAIN TABLE
@@ -219,16 +276,44 @@ display_cols = [
     "days_to_earnings"
 ]
 
-available_cols = [c for c in display_cols if c in df.columns]
-missing_cols = [c for c in display_cols if c not in df.columns]
-
-if missing_cols:
-    st.warning(f"Missing columns from dataset: {missing_cols}")
-
-table_df = df[available_cols].copy()
+available_cols = [c for c in display_cols if c in filtered.columns]
+table_df = filtered[available_cols].copy()
 table_df = table_df.set_index("ticker")
 
 st.dataframe(table_df, use_container_width=True)
+
+# --------------------------------------------------
+# FILTERED TOTALS (RESTORED)
+# --------------------------------------------------
+
+st.markdown("### 📊 Selected Totals")
+
+c1,c2,c3 = st.columns(3)
+c1.metric("Real (Selected)", f"{filtered['real_value'].sum():,.0f}")
+c2.metric("Synthetic (Selected)", f"{filtered['synthetic_value'].sum():,.0f}")
+c3.metric("Net (Selected)", f"{filtered['net_position_value'].sum():,.0f}")
+
+# --------------------------------------------------
+# ROLE SUMMARY (RESTORED)
+# --------------------------------------------------
+
+st.divider()
+st.subheader("🧩 Role-Level Summary")
+
+role_summary = (
+    filtered.groupby("role_bucket", dropna=False)
+    .agg(
+        total_weight=("index_weight_pct","sum"),
+        real_exposure=("real_value","sum"),
+        synthetic_exposure=("synthetic_value","sum"),
+        net_exposure=("net_position_value","sum"),
+        median_upside=("pct_to_best_target","median")
+    )
+    .reset_index()
+    .sort_values("total_weight",ascending=False)
+)
+
+st.dataframe(role_summary, use_container_width=True)
 
 # --------------------------------------------------
 # FOOTER
