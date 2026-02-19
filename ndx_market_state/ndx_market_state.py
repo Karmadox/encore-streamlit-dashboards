@@ -271,8 +271,7 @@ table_df = table_df.set_index("ticker")
 
 st.dataframe(
     table_df,
-    use_container_width=True,
-    height=600
+    use_container_width=True
 )
 
 # --------------------------------------------------
