@@ -210,13 +210,11 @@ Synthetic exposure distributes the NQ futures position proportionally across con
 
 ---
 
-## 📊 Revision Breadth (Primary Signal)
+## 📊 Revision Breadth (Primary Driver)
 
-Revision Breadth measures **net directional analyst agreement**:
+Revision Breadth measures **net analyst agreement**:
 
-\[
 (Up Revisions − Down Revisions) / Analyst Count
-\]
 
 Interpretation:
 
@@ -224,38 +222,59 @@ Interpretation:
 •  0.0 → Balanced revisions  
 • −1.0 → All analysts revising down  
 
----
-
-## 🔔 Symbol Classification (Based on 1M Breadth Only)
-
-Symbols reflect **net consensus shift**, not magnitude of target change:
-
-• ▲▲▲ → Breadth ≥ +0.30 (Strong positive shift)  
-• ▲▲ → +0.10 to +0.30 (Moderate positive shift)  
-• — → −0.10 to +0.10 (Neutral / mixed)  
-• ▼▼ → −0.30 to −0.10 (Moderate negative shift)  
-• ▼▼▼ → ≤ −0.30 (Strong negative shift)  
-
-No symbol = Neutral revision regime.
+Breadth captures **consensus direction**, not magnitude.
 
 ---
 
-### 📈 Target Δ (1M / 3M)
+## 📈 Target Δ (Magnitude)
 
-Target Delta shows **magnitude** of target change, but does not drive the symbol classification.
+Target Delta shows the **percentage change in consensus price target** over 1M or 3M.
 
-• Use it to gauge size of expectation change  
-• Use breadth to gauge analyst agreement  
+It measures **size of expectation change**, not agreement.
+
+• Breadth = direction & agreement  
+• Target Δ = magnitude of change  
 
 ---
 
-### 🧠 How to Interpret
+## 🔔 Symbol Classification (Hybrid Model)
+
+Symbols primarily reflect **1M breadth**,  
+with extreme categories confirmed by target magnitude.
+
+### Positive Regimes
+
+• ▲▲▲ → Breadth ≥ +0.30 **and** Target Δ ≥ +5%  
+• ▲▲ → Breadth ≥ +0.10  
+• ▲ → Breadth > 0  
+
+### Negative Regimes
+
+• ▼▼▼ → Breadth ≤ −0.30 **and** Target Δ ≤ −5%  
+• ▼▼ → Breadth ≤ −0.10  
+• ▼ → Breadth < 0  
+
+No symbol = Neutral / mixed revision profile.
+
+---
+
+## 🧠 How to Interpret
 
 • High breadth + rising targets → Strengthening conviction  
-• High breadth + flat targets → Early expectation shift  
-• Low breadth + large delta → Narrow / isolated revisions  
+• Positive breadth + small delta → Early expectation shift  
+• Large delta + weak breadth → Narrow / isolated revisions  
 • 3M confirming 1M → Structural shift  
-• 1M diverging from 3M → Potential turning point
+• 1M diverging from 3M → Potential turning point  
+• Broad ▼▼▼ across index → Deteriorating forward expectations  
+
+---
+
+### 🧭 Institutional Framing
+
+Think of breadth as **consensus alignment**  
+and target delta as **intensity**.
+
+Strong regimes require both.
 """)
 
 st.divider()
