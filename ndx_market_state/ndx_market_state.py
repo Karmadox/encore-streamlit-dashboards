@@ -101,9 +101,25 @@ def load_nq_index_level():
 
 snapshot_date = load_latest_snapshot_date()
 df = load_market_state(snapshot_date)
-revisions = load_revisions(snapshot_date)
 positions = load_positions()
 nq_index_level = load_nq_index_level()
+
+revisions = load_revisions(snapshot_date)
+
+# Keep only revision-specific columns to avoid overwrite
+revision_cols = [
+    "ticker",
+    "target_delta_1m_pct",
+    "target_delta_3m_pct",
+    "revision_breadth_1m",
+    "revision_breadth_3m",
+    "up_1m",
+    "dn_1m",
+    "up_3m",
+    "dn_3m"
+]
+
+revisions = revisions[[c for c in revision_cols if c in revisions.columns]]
 
 # --------------------------------------------------
 # MERGE REVISIONS
@@ -267,12 +283,13 @@ display_cols = [
     "revision_signal",
     "sector_name","cohort_name","role_bucket",
     "index_rank","index_weight_pct","last_price",
+    "pct_change_1d","pct_change_5d",
+    "pct_change_1m","pct_change_ytd","pct_from_52w_high",
     "quantity","real_value",
     "synthetic_quantity","synthetic_value","net_position_value",
-    "best_target_price",
-    "target_delta_1m_pct",
-    "revision_breadth_1m",
-    "analyst_count",
+    "best_target_price","pct_to_best_target",
+    "target_delta_1m_pct","revision_breadth_1m",
+    "analyst_count","best_analyst_rating",
     "days_to_earnings"
 ]
 
