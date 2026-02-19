@@ -106,6 +106,8 @@ nq_index_level = load_nq_index_level()
 
 revisions = load_revisions(snapshot_date)
 
+st.write("Revision rows loaded:", len(revisions))
+
 st.write("Market tickers sample:", df["ticker"].head(10).tolist())
 st.write("Revision tickers sample:", revisions["ticker"].head(10).tolist())
 
