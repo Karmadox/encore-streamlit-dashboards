@@ -248,7 +248,7 @@ if earnings_filter:
     filtered = filtered[filtered["days_to_earnings"].between(0,14)]
 
 # --------------------------------------------------
-# MAIN TABLE
+# MAIN TABLE (Ticker Frozen via Index)
 # --------------------------------------------------
 
 st.subheader("📋 Canonical Market State + Synthetic Overlay")
@@ -264,24 +264,15 @@ display_cols = [
     "days_to_earnings"
 ]
 
+table_df = filtered[display_cols].copy()
+
+# Make ticker the index (sticky left column)
+table_df = table_df.set_index("ticker")
+
 st.dataframe(
-    filtered[display_cols].style.format({
-        "index_weight_pct":"{:.3f}",
-        "last_price":"{:.2f}",
-        "quantity":"{:,.0f}",
-        "real_value":"{:,.0f}",
-        "synthetic_quantity":"{:,.2f}",
-        "synthetic_value":"{:,.0f}",
-        "net_position_value":"{:,.0f}",
-        "best_target_price":"{:.2f}",
-        "pct_change_1d":"{:.2f}%",
-        "pct_change_5d":"{:.2f}%",
-        "pct_change_1m":"{:.2f}%",
-        "pct_change_ytd":"{:.2f}%",
-        "pct_from_52w_high":"{:.2f}%",
-        "pct_to_best_target":"{:.2f}%"
-    }),
-    use_container_width=True
+    table_df,
+    use_container_width=True,
+    height=600
 )
 
 # --------------------------------------------------
