@@ -219,7 +219,13 @@ display_cols = [
     "days_to_earnings"
 ]
 
-table_df = df[display_cols].copy()
+available_cols = [c for c in display_cols if c in df.columns]
+missing_cols = [c for c in display_cols if c not in df.columns]
+
+if missing_cols:
+    st.warning(f"Missing columns from dataset: {missing_cols}")
+
+table_df = df[available_cols].copy()
 table_df = table_df.set_index("ticker")
 
 st.dataframe(table_df, use_container_width=True)
