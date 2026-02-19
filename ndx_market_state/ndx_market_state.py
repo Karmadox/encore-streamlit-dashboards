@@ -186,6 +186,74 @@ We are currently **{direction} {abs(int(nq_contracts))} NQH6 contracts**
 """)
 
 # --------------------------------------------------
+# HOW TO READ
+# --------------------------------------------------
+
+with st.expander("ℹ️ How to read this chart"):
+    st.markdown("""
+Combines:
+
+• **Index structure** — Rank & weight inside the Nasdaq-100  
+• **Momentum** — 1D / 5D / 1M / YTD price change  
+• **Analyst expectations** — Target price & upside  
+• **Revision dynamics** — How consensus is evolving  
+• **Real portfolio exposure** — Actual equity holdings  
+• **Synthetic NQ overlay** — Futures hedge apportioned by index weight  
+
+---
+
+### 🔢 Core Concepts
+
+**Net Exposure = Real Equity + Synthetic Allocation**
+
+Synthetic exposure distributes the NQ futures position proportionally across constituents based on index weight.
+
+---
+
+### 📊 Revision Metrics
+
+**Target Δ (1M / 3M)**  
+Percentage change in consensus price target over the period.
+
+**Revision Breadth (1M / 3M)**  
+\[
+(Up Revisions − Down Revisions) / Analyst Count
+\]
+
+- +1.0 → All analysts revising up  
+- 0.0 → Balanced revisions  
+- −1.0 → All analysts revising down  
+
+---
+
+### 🔔 Revision Signal Symbols
+
+Signals summarize both **magnitude (target delta)** and **breadth (analyst agreement)**:
+
+• ▲▲▲ → Strong & broad upward revisions  
+• ▲▲ → Moderate upward revisions  
+• ▲ → Mild positive revisions  
+
+• ▼▼▼ → Strong & broad downward revisions  
+• ▼▼ → Moderate downward revisions  
+• ▼ → Mild negative revisions  
+
+No symbol = Neutral / mixed revision profile.
+
+---
+
+### 🧠 How to Interpret
+
+• **High breadth + rising targets** → Strengthening conviction  
+• **Rising targets but weak breadth** → Narrow leadership  
+• **Falling targets + negative breadth** → Deteriorating expectations  
+• **3M confirming 1M** → Structural shift  
+• **1M diverging from 3M** → Possible turning point
+""")
+
+st.divider()
+
+# --------------------------------------------------
 # GLOBAL METRICS
 # --------------------------------------------------
 
