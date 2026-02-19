@@ -60,18 +60,6 @@ def load_market_state(snapshot_date):
     with get_conn() as conn:
         return pd.read_sql(sql, conn, params=(snapshot_date,))
 
-@st.cache_data(ttl=300)
-def load_revisions(snapshot_date):
-    sql = """
-        SELECT r.*, i.ticker
-        FROM encoredb.ndx_analyst_revisions r
-        JOIN encoredb.instruments i
-          ON r.instrument_id = i.instrument_id
-        WHERE r.snapshot_date = %s
-    """
-    with get_conn() as conn:
-        return pd.read_sql(sql, conn, params=(snapshot_date,))
-
 @st.cache_data(ttl=60)
 def load_positions():
     sql = """
@@ -103,53 +91,6 @@ snapshot_date = load_latest_snapshot_date()
 df = load_market_state(snapshot_date)
 positions = load_positions()
 nq_index_level = load_nq_index_level()
-
-revisions = load_revisions(snapshot_date)
-
-# Keep only revision-specific columns to avoid overwrite
-revision_cols = [
-    "ticker",
-    "target_delta_1m_pct",
-    "target_delta_3m_pct",
-    "revision_breadth_1m",
-    "revision_breadth_3m",
-    "up_1m",
-    "dn_1m",
-    "up_3m",
-    "dn_3m"
-]
-
-revisions = revisions[[c for c in revision_cols if c in revisions.columns]]
-
-# --------------------------------------------------
-# MERGE REVISIONS
-# --------------------------------------------------
-
-df = df.merge(revisions, on="ticker", how="left")
-
-# --------------------------------------------------
-# REVISION SIGNAL ENGINE
-# --------------------------------------------------
-
-def revision_signal(row):
-    breadth = row.get("revision_breadth_1m")
-    delta = row.get("target_delta_1m_pct")
-
-    if pd.isna(breadth) or pd.isna(delta):
-        return ""
-
-    if breadth > 0.3 and delta > 3:
-        return "🟢⬆⬆"
-    if breadth > 0.1:
-        return "🟢⬆"
-    if breadth < -0.3 and delta < -3:
-        return "🔴⬇⬇"
-    if breadth < -0.1:
-        return "🔴⬇"
-
-    return ""
-
-df["revision_signal"] = df.apply(revision_signal, axis=1)
 
 # --------------------------------------------------
 # MERGE REAL POSITIONS
@@ -187,7 +128,6 @@ df["net_position_value"] = df["real_value"] + df["synthetic_value"]
 
 st.title("📈 Nasdaq-100 — Market State")
 st.caption(f"As of end of day: {snapshot_date.strftime('%d %b %Y')}")
-st.write(df.columns)
 
 # --------------------------------------------------
 # HOW TO READ
@@ -205,21 +145,23 @@ Combines:
 
 **Net = Real Equity + Synthetic Allocation**
 
-### 🔔 Revision Symbols
+### 🔔 Revision Symbols (from SQL engine)
 
-• 🟢⬆⬆ → Broad and strong positive revisions  
-• 🟢⬆ → Mild positive revision trend  
-• 🔴⬇⬇ → Broad and strong negative revisions  
-• 🔴⬇ → Mild negative revision trend  
+• ▲▲▲ → Strong & broad upward revisions  
+• ▲▲ → Moderate upward revisions  
+• ▲ → Mild positive revisions  
+• ▼▼▼ → Strong & broad downward revisions  
+• ▼▼ → Moderate downward revisions  
+• ▼ → Mild negative revisions  
 
 Breadth = (Up − Down) / Analyst Count  
-Target delta = % change in consensus target over 1M
+Target delta = % change in consensus target (1M)
 """)
 
 st.divider()
 
 # --------------------------------------------------
-# GLOBAL METRICS (RESTORED)
+# GLOBAL METRICS
 # --------------------------------------------------
 
 top5_weight = df.loc[df["index_rank"] <= 5, "index_weight_pct"].sum()
@@ -242,7 +184,7 @@ c6.metric("Net Exposure", f"{total_net:,.0f}")
 st.divider()
 
 # --------------------------------------------------
-# FILTERS (RESTORED)
+# FILTERS
 # --------------------------------------------------
 
 col1,col2,col3,col4 = st.columns(4)
@@ -301,7 +243,7 @@ table_df = table_df.set_index("ticker")
 st.dataframe(table_df, use_container_width=True)
 
 # --------------------------------------------------
-# FILTERED TOTALS (RESTORED)
+# FILTERED TOTALS
 # --------------------------------------------------
 
 st.markdown("### 📊 Selected Totals")
@@ -312,7 +254,7 @@ c2.metric("Synthetic (Selected)", f"{filtered['synthetic_value'].sum():,.0f}")
 c3.metric("Net (Selected)", f"{filtered['net_position_value'].sum():,.0f}")
 
 # --------------------------------------------------
-# ROLE SUMMARY (RESTORED)
+# ROLE SUMMARY
 # --------------------------------------------------
 
 st.divider()
