@@ -106,17 +106,6 @@ nq_index_level = load_nq_index_level()
 
 revisions = load_revisions(snapshot_date)
 
-st.write("Revision rows loaded:", len(revisions))
-
-st.write("Market tickers sample:", df["ticker"].head(10).tolist())
-st.write("Revision tickers sample:", revisions["ticker"].head(10).tolist())
-
-st.write("Tickers in market but not revisions:",
-         set(df["ticker"]) - set(revisions["ticker"]))
-
-st.write("Tickers in revisions but not market:",
-         set(revisions["ticker"]) - set(df["ticker"]))
-
 # Keep only revision-specific columns to avoid overwrite
 revision_cols = [
     "ticker",
@@ -198,6 +187,9 @@ df["net_position_value"] = df["real_value"] + df["synthetic_value"]
 
 st.title("📈 Nasdaq-100 — Market State")
 st.caption(f"As of end of day: {snapshot_date.strftime('%d %b %Y')}")
+
+st.write("Market snapshot date:", snapshot_date)
+st.write("Revisions snapshot dates:", revisions["snapshot_date"].unique())
 
 # --------------------------------------------------
 # HOW TO READ
