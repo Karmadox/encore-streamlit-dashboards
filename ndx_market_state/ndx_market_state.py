@@ -134,43 +134,47 @@ if goog_mask.sum() == 2:
 
     combined["ticker"] = "GOOGL"
 
+    # Sum exposure-related fields
     sum_cols = [
         "index_weight_pct",
         "real_value",
         "synthetic_value",
         "net_position_value",
         "quantity",
-        "synthetic_quantity",
-        "up_1m","dn_1m","up_3m","dn_3m"
+        "synthetic_quantity"
     ]
 
     for col in sum_cols:
         if col in df.columns:
             combined[col] = goog_rows[col].sum()
 
-    if "analyst_count" in df.columns:
-        total_analysts = goog_rows["analyst_count"].sum()
-        combined["analyst_count"] = total_analysts
+    # Weight-average revision & target fields
+    weight_col = "index_weight_pct"
 
-        if total_analysts > 0:
-            combined["revision_breadth_1m"] = (
-                goog_rows["up_1m"].sum() - goog_rows["dn_1m"].sum()
-            ) / total_analysts
+    revision_cols = [
+        "target_delta_1m_pct",
+        "target_delta_3m_pct",
+        "revision_breadth_1m",
+        "revision_breadth_3m"
+    ]
 
-            combined["revision_breadth_3m"] = (
-                goog_rows["up_3m"].sum() - goog_rows["dn_3m"].sum()
-            ) / total_analysts
-
-    for col in ["target_delta_1m_pct","target_delta_3m_pct"]:
+    for col in revision_cols:
         if col in df.columns:
-            combined[col] = goog_rows[col].mean()
+            weights = goog_rows[weight_col]
+            values = goog_rows[col]
+            combined[col] = (values * weights).sum() / weights.sum()
 
+    # Analyst count summed
+    if "analyst_count" in df.columns:
+        combined["analyst_count"] = goog_rows["analyst_count"].sum()
+
+    # Keep best rank
     combined["index_rank"] = goog_rows["index_rank"].min()
 
     df = df[~goog_mask]
     df = pd.concat([df, pd.DataFrame([combined])], ignore_index=True)
     df = df.sort_values("index_rank").reset_index(drop=True)
-
+    
 # --------------------------------------------------
 # HEADER
 # --------------------------------------------------
