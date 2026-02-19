@@ -106,6 +106,15 @@ nq_index_level = load_nq_index_level()
 
 revisions = load_revisions(snapshot_date)
 
+st.write("Market tickers sample:", df["ticker"].head(10).tolist())
+st.write("Revision tickers sample:", revisions["ticker"].head(10).tolist())
+
+st.write("Tickers in market but not revisions:",
+         set(df["ticker"]) - set(revisions["ticker"]))
+
+st.write("Tickers in revisions but not market:",
+         set(revisions["ticker"]) - set(df["ticker"]))
+
 # Keep only revision-specific columns to avoid overwrite
 revision_cols = [
     "ticker",
