@@ -187,9 +187,7 @@ df["net_position_value"] = df["real_value"] + df["synthetic_value"]
 
 st.title("📈 Nasdaq-100 — Market State")
 st.caption(f"As of end of day: {snapshot_date.strftime('%d %b %Y')}")
-
-st.write("Market snapshot date:", snapshot_date)
-st.write("Revisions snapshot dates:", revisions["snapshot_date"].unique())
+st.write(df.columns)
 
 # --------------------------------------------------
 # HOW TO READ
