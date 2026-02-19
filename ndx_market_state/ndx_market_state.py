@@ -123,6 +123,55 @@ df["synthetic_quantity"] = df["synthetic_quantity"].fillna(0)
 df["net_position_value"] = df["real_value"] + df["synthetic_value"]
 
 # --------------------------------------------------
+# COMBINE GOOG + GOOGL (DISPLAY AS GOOGL)
+# --------------------------------------------------
+
+goog_mask = df["ticker"].isin(["GOOG", "GOOGL"])
+
+if goog_mask.sum() == 2:
+    goog_rows = df[goog_mask].copy()
+    combined = goog_rows.iloc[0].copy()
+
+    combined["ticker"] = "GOOGL"
+
+    sum_cols = [
+        "index_weight_pct",
+        "real_value",
+        "synthetic_value",
+        "net_position_value",
+        "quantity",
+        "synthetic_quantity",
+        "up_1m","dn_1m","up_3m","dn_3m"
+    ]
+
+    for col in sum_cols:
+        if col in df.columns:
+            combined[col] = goog_rows[col].sum()
+
+    if "analyst_count" in df.columns:
+        total_analysts = goog_rows["analyst_count"].sum()
+        combined["analyst_count"] = total_analysts
+
+        if total_analysts > 0:
+            combined["revision_breadth_1m"] = (
+                goog_rows["up_1m"].sum() - goog_rows["dn_1m"].sum()
+            ) / total_analysts
+
+            combined["revision_breadth_3m"] = (
+                goog_rows["up_3m"].sum() - goog_rows["dn_3m"].sum()
+            ) / total_analysts
+
+    for col in ["target_delta_1m_pct","target_delta_3m_pct"]:
+        if col in df.columns:
+            combined[col] = goog_rows[col].mean()
+
+    combined["index_rank"] = goog_rows["index_rank"].min()
+
+    df = df[~goog_mask]
+    df = pd.concat([df, pd.DataFrame([combined])], ignore_index=True)
+    df = df.sort_values("index_rank").reset_index(drop=True)
+
+# --------------------------------------------------
 # HEADER
 # --------------------------------------------------
 
@@ -145,17 +194,19 @@ Combines:
 
 **Net = Real Equity + Synthetic Allocation**
 
-### 🔔 Revision Symbols (from SQL engine)
+### 🔔 Revision Metrics
+
+• Target Δ (1M / 3M) → % change in consensus target  
+• Breadth (1M / 3M) → (Up − Down) / Analyst Count  
+
+### 🔔 Signal Symbols
 
 • ▲▲▲ → Strong & broad upward revisions  
 • ▲▲ → Moderate upward revisions  
 • ▲ → Mild positive revisions  
 • ▼▼▼ → Strong & broad downward revisions  
 • ▼▼ → Moderate downward revisions  
-• ▼ → Mild negative revisions  
-
-Breadth = (Up − Down) / Analyst Count  
-Target delta = % change in consensus target (1M)
+• ▼ → Mild negative revisions
 """)
 
 st.divider()
@@ -184,38 +235,6 @@ c6.metric("Net Exposure", f"{total_net:,.0f}")
 st.divider()
 
 # --------------------------------------------------
-# FILTERS
-# --------------------------------------------------
-
-col1,col2,col3,col4 = st.columns(4)
-
-with col1:
-    role_filter = st.multiselect("Role bucket",
-        sorted(df["role_bucket"].dropna().unique()))
-
-with col2:
-    cohort_filter = st.multiselect("Cohort",
-        sorted(df["cohort_name"].dropna().unique()))
-
-with col3:
-    max_rank = st.slider("Show top N constituents",1,101,101)
-
-with col4:
-    earnings_filter = st.checkbox("Only earnings ≤14 days")
-
-filtered = df.copy()
-
-if role_filter:
-    filtered = filtered[filtered["role_bucket"].isin(role_filter)]
-if cohort_filter:
-    filtered = filtered[filtered["cohort_name"].isin(cohort_filter)]
-
-filtered = filtered[filtered["index_rank"] <= max_rank]
-
-if earnings_filter:
-    filtered = filtered[filtered["days_to_earnings"].between(0,14)]
-
-# --------------------------------------------------
 # MAIN TABLE
 # --------------------------------------------------
 
@@ -223,7 +242,6 @@ st.subheader("📋 Canonical Market State + Synthetic Overlay")
 
 display_cols = [
     "ticker",
-    "revision_signal",
     "sector_name","cohort_name","role_bucket",
     "index_rank","index_weight_pct","last_price",
     "pct_change_1d","pct_change_5d",
@@ -231,49 +249,27 @@ display_cols = [
     "quantity","real_value",
     "synthetic_quantity","synthetic_value","net_position_value",
     "best_target_price","pct_to_best_target",
-    "target_delta_1m_pct","revision_breadth_1m",
+
+    # 1M
+    "target_delta_1m_pct",
+    "revision_breadth_1m",
+
+    # 3M
+    "target_delta_3m_pct",
+    "revision_breadth_3m",
+
+    # Signal after raw data
+    "revision_signal",
+
     "analyst_count","best_analyst_rating",
     "days_to_earnings"
 ]
 
-available_cols = [c for c in display_cols if c in filtered.columns]
-table_df = filtered[available_cols].copy()
+available_cols = [c for c in display_cols if c in df.columns]
+table_df = df[available_cols].copy()
 table_df = table_df.set_index("ticker")
 
 st.dataframe(table_df, use_container_width=True)
-
-# --------------------------------------------------
-# FILTERED TOTALS
-# --------------------------------------------------
-
-st.markdown("### 📊 Selected Totals")
-
-c1,c2,c3 = st.columns(3)
-c1.metric("Real (Selected)", f"{filtered['real_value'].sum():,.0f}")
-c2.metric("Synthetic (Selected)", f"{filtered['synthetic_value'].sum():,.0f}")
-c3.metric("Net (Selected)", f"{filtered['net_position_value'].sum():,.0f}")
-
-# --------------------------------------------------
-# ROLE SUMMARY
-# --------------------------------------------------
-
-st.divider()
-st.subheader("🧩 Role-Level Summary")
-
-role_summary = (
-    filtered.groupby("role_bucket", dropna=False)
-    .agg(
-        total_weight=("index_weight_pct","sum"),
-        real_exposure=("real_value","sum"),
-        synthetic_exposure=("synthetic_value","sum"),
-        net_exposure=("net_position_value","sum"),
-        median_upside=("pct_to_best_target","median")
-    )
-    .reset_index()
-    .sort_values("total_weight",ascending=False)
-)
-
-st.dataframe(role_summary, use_container_width=True)
 
 # --------------------------------------------------
 # FOOTER
