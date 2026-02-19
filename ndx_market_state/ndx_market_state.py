@@ -196,13 +196,13 @@ Combines:
 • **Index structure** — Rank & weight inside the Nasdaq-100  
 • **Momentum** — 1D / 5D / 1M / YTD price change  
 • **Analyst expectations** — Target price & upside  
-• **Revision dynamics** — How consensus is evolving  
+• **Revision dynamics** — How analyst consensus is shifting  
 • **Real portfolio exposure** — Actual equity holdings  
 • **Synthetic NQ overlay** — Futures hedge apportioned by index weight  
 
 ---
 
-### 🔢 Core Concepts
+### 🔢 Core Concept
 
 **Net Exposure = Real Equity + Synthetic Allocation**
 
@@ -210,45 +210,52 @@ Synthetic exposure distributes the NQ futures position proportionally across con
 
 ---
 
-### 📊 Revision Metrics
+## 📊 Revision Breadth (Primary Signal)
 
-**Target Δ (1M / 3M)**  
-Percentage change in consensus price target over the period.
+Revision Breadth measures **net directional analyst agreement**:
 
-**Revision Breadth (1M / 3M)**  
 \[
 (Up Revisions − Down Revisions) / Analyst Count
 \]
 
-- +1.0 → All analysts revising up  
-- 0.0 → Balanced revisions  
-- −1.0 → All analysts revising down  
+Interpretation:
+
+• +1.0 → All analysts revising up  
+•  0.0 → Balanced revisions  
+• −1.0 → All analysts revising down  
 
 ---
 
-### 🔔 Revision Signal Symbols
+## 🔔 Symbol Classification (Based on 1M Breadth Only)
 
-Signals summarize both **magnitude (target delta)** and **breadth (analyst agreement)**:
+Symbols reflect **net consensus shift**, not magnitude of target change:
 
-• ▲▲▲ → Strong & broad upward revisions  
-• ▲▲ → Moderate upward revisions  
-• ▲ → Mild positive revisions  
+• ▲▲▲ → Breadth ≥ +0.30 (Strong positive shift)  
+• ▲▲ → +0.10 to +0.30 (Moderate positive shift)  
+• — → −0.10 to +0.10 (Neutral / mixed)  
+• ▼▼ → −0.30 to −0.10 (Moderate negative shift)  
+• ▼▼▼ → ≤ −0.30 (Strong negative shift)  
 
-• ▼▼▼ → Strong & broad downward revisions  
-• ▼▼ → Moderate downward revisions  
-• ▼ → Mild negative revisions  
+No symbol = Neutral revision regime.
 
-No symbol = Neutral / mixed revision profile.
+---
+
+### 📈 Target Δ (1M / 3M)
+
+Target Delta shows **magnitude** of target change, but does not drive the symbol classification.
+
+• Use it to gauge size of expectation change  
+• Use breadth to gauge analyst agreement  
 
 ---
 
 ### 🧠 How to Interpret
 
-• **High breadth + rising targets** → Strengthening conviction  
-• **Rising targets but weak breadth** → Narrow leadership  
-• **Falling targets + negative breadth** → Deteriorating expectations  
-• **3M confirming 1M** → Structural shift  
-• **1M diverging from 3M** → Possible turning point
+• High breadth + rising targets → Strengthening conviction  
+• High breadth + flat targets → Early expectation shift  
+• Low breadth + large delta → Narrow / isolated revisions  
+• 3M confirming 1M → Structural shift  
+• 1M diverging from 3M → Potential turning point
 """)
 
 st.divider()
