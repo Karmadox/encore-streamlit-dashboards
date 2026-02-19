@@ -33,7 +33,6 @@ if not check_password():
 # --------------------------------------------------
 
 st.set_page_config(page_title="Nasdaq-100 Market State", layout="wide")
-
 DB_CONFIG = st.secrets["db"]
 
 def get_conn():
@@ -119,11 +118,10 @@ df["synthetic_quantity"] = df["synthetic_value"] / df["last_price"]
 
 df["synthetic_value"] = df["synthetic_value"].fillna(0)
 df["synthetic_quantity"] = df["synthetic_quantity"].fillna(0)
-
 df["net_position_value"] = df["real_value"] + df["synthetic_value"]
 
 # --------------------------------------------------
-# COMBINE GOOG + GOOGL (DISPLAY AS GOOGL)
+# COMBINE GOOG + GOOGL → GOOGL
 # --------------------------------------------------
 
 goog_mask = df["ticker"].isin(["GOOG", "GOOGL"])
@@ -131,26 +129,17 @@ goog_mask = df["ticker"].isin(["GOOG", "GOOGL"])
 if goog_mask.sum() == 2:
     goog_rows = df[goog_mask].copy()
     combined = goog_rows.iloc[0].copy()
-
     combined["ticker"] = "GOOGL"
 
-    # Sum exposure-related fields
     sum_cols = [
-        "index_weight_pct",
-        "real_value",
-        "synthetic_value",
-        "net_position_value",
-        "quantity",
-        "synthetic_quantity"
+        "index_weight_pct","real_value","synthetic_value",
+        "net_position_value","quantity","synthetic_quantity"
     ]
 
     for col in sum_cols:
-        if col in df.columns:
-            combined[col] = goog_rows[col].sum()
+        combined[col] = goog_rows[col].sum()
 
-    # Weight-average revision & target fields
     weight_col = "index_weight_pct"
-
     revision_cols = [
         "target_delta_1m_pct",
         "target_delta_3m_pct",
@@ -164,17 +153,13 @@ if goog_mask.sum() == 2:
             values = goog_rows[col]
             combined[col] = (values * weights).sum() / weights.sum()
 
-    # Analyst count summed
-    if "analyst_count" in df.columns:
-        combined["analyst_count"] = goog_rows["analyst_count"].sum()
-
-    # Keep best rank
+    combined["analyst_count"] = goog_rows["analyst_count"].sum()
     combined["index_rank"] = goog_rows["index_rank"].min()
 
     df = df[~goog_mask]
     df = pd.concat([df, pd.DataFrame([combined])], ignore_index=True)
     df = df.sort_values("index_rank").reset_index(drop=True)
-    
+
 # --------------------------------------------------
 # HEADER
 # --------------------------------------------------
@@ -183,37 +168,22 @@ st.title("📈 Nasdaq-100 — Market State")
 st.caption(f"As of end of day: {snapshot_date.strftime('%d %b %Y')}")
 
 # --------------------------------------------------
-# HOW TO READ
+# SYNTHETIC DISCLOSURE
 # --------------------------------------------------
 
-with st.expander("ℹ️ How to read this chart"):
-    st.markdown("""
-Combines:
+if not nq_row.empty and nq_index_level is not None:
+    nq_contracts = nq_row["quantity"].iloc[0]
+    direction = "Short" if nq_contracts < 0 else "Long"
 
-• Index structure  
-• Momentum & analyst expectations  
-• Real portfolio exposure  
-• Synthetic NQ futures overlay  
-• Analyst revision dynamics  
+    st.markdown(f"""
+### 🧮 Synthetic Hedge Overlay
 
-**Net = Real Equity + Synthetic Allocation**
+We are currently **{direction} {abs(int(nq_contracts))} NQH6 contracts**
 
-### 🔔 Revision Metrics
-
-• Target Δ (1M / 3M) → % change in consensus target  
-• Breadth (1M / 3M) → (Up − Down) / Analyst Count  
-
-### 🔔 Signal Symbols
-
-• ▲▲▲ → Strong & broad upward revisions  
-• ▲▲ → Moderate upward revisions  
-• ▲ → Mild positive revisions  
-• ▼▼▼ → Strong & broad downward revisions  
-• ▼▼ → Moderate downward revisions  
-• ▼ → Mild negative revisions
+• Index level used: {nq_index_level:,.2f}  
+• Contract multiplier: {NQ_MULTIPLIER}  
+• Total synthetic notional: {synthetic_index_notional:,.0f}
 """)
-
-st.divider()
 
 # --------------------------------------------------
 # GLOBAL METRICS
@@ -239,41 +209,102 @@ c6.metric("Net Exposure", f"{total_net:,.0f}")
 st.divider()
 
 # --------------------------------------------------
+# FILTERS
+# --------------------------------------------------
+
+col1,col2,col3,col4 = st.columns(4)
+
+with col1:
+    role_filter = st.multiselect("Role bucket",
+        sorted(df["role_bucket"].dropna().unique()))
+
+with col2:
+    cohort_filter = st.multiselect("Cohort",
+        sorted(df["cohort_name"].dropna().unique()))
+
+with col3:
+    max_rank = st.slider("Show top N constituents",1,101,101)
+
+with col4:
+    earnings_filter = st.checkbox("Only earnings ≤14 days")
+
+filtered = df.copy()
+
+if role_filter:
+    filtered = filtered[filtered["role_bucket"].isin(role_filter)]
+if cohort_filter:
+    filtered = filtered[filtered["cohort_name"].isin(cohort_filter)]
+filtered = filtered[filtered["index_rank"] <= max_rank]
+if earnings_filter:
+    filtered = filtered[filtered["days_to_earnings"].between(0,14)]
+
+# --------------------------------------------------
 # MAIN TABLE
 # --------------------------------------------------
 
 st.subheader("📋 Canonical Market State + Synthetic Overlay")
 
 display_cols = [
-    "ticker",
-    "sector_name","cohort_name","role_bucket",
+    "ticker","sector_name","cohort_name","role_bucket",
     "index_rank","index_weight_pct","last_price",
-    "pct_change_1d","pct_change_5d",
-    "pct_change_1m","pct_change_ytd","pct_from_52w_high",
-    "quantity","real_value",
-    "synthetic_quantity","synthetic_value","net_position_value",
+    "pct_change_1d","pct_change_5d","pct_change_1m",
+    "pct_change_ytd","pct_from_52w_high",
+    "quantity","real_value","synthetic_quantity",
+    "synthetic_value","net_position_value",
     "best_target_price","pct_to_best_target",
-
-    # 1M
-    "target_delta_1m_pct",
-    "revision_breadth_1m",
-
-    # 3M
-    "target_delta_3m_pct",
-    "revision_breadth_3m",
-
-    # Signal after raw data
+    "target_delta_1m_pct","revision_breadth_1m",
+    "target_delta_3m_pct","revision_breadth_3m",
     "revision_signal",
-
     "analyst_count","best_analyst_rating",
     "days_to_earnings"
 ]
 
-available_cols = [c for c in display_cols if c in df.columns]
-table_df = df[available_cols].copy()
+table_df = filtered[[c for c in display_cols if c in filtered.columns]]
 table_df = table_df.set_index("ticker")
 
 st.dataframe(table_df, use_container_width=True)
+
+# --------------------------------------------------
+# FILTERED TOTALS
+# --------------------------------------------------
+
+st.markdown("### 📊 Selected Totals")
+
+c1,c2,c3 = st.columns(3)
+c1.metric("Real (Selected)", f"{filtered['real_value'].sum():,.0f}")
+c2.metric("Synthetic (Selected)", f"{filtered['synthetic_value'].sum():,.0f}")
+c3.metric("Net (Selected)", f"{filtered['net_position_value'].sum():,.0f}")
+
+# --------------------------------------------------
+# ROLE SUMMARY
+# --------------------------------------------------
+
+st.divider()
+st.subheader("🧩 Role-Level Summary")
+
+role_summary = (
+    filtered.groupby("role_bucket", dropna=False)
+    .agg(
+        total_weight=("index_weight_pct","sum"),
+        real_exposure=("real_value","sum"),
+        synthetic_exposure=("synthetic_value","sum"),
+        net_exposure=("net_position_value","sum"),
+        median_upside=("pct_to_best_target","median")
+    )
+    .reset_index()
+    .sort_values("total_weight",ascending=False)
+)
+
+st.dataframe(
+    role_summary.style.format({
+        "total_weight":"{:.2f}%",
+        "real_exposure":"{:,.0f}",
+        "synthetic_exposure":"{:,.0f}",
+        "net_exposure":"{:,.0f}",
+        "median_upside":"{:.2f}%"
+    }),
+    use_container_width=True
+)
 
 # --------------------------------------------------
 # FOOTER
