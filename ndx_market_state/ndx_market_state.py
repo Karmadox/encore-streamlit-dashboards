@@ -305,6 +305,31 @@ st.dataframe(
 )
 
 # --------------------------------------------------
+# COHORT % OF NASDAQ-100
+# --------------------------------------------------
+
+st.divider()
+st.subheader("📊 Cohort % of Nasdaq-100")
+
+cohort_summary = (
+    df.groupby("cohort_name", dropna=False)
+    .agg(
+        cohort_weight_pct=("index_weight_pct", "sum"),
+        constituent_count=("ticker", "count")
+    )
+    .reset_index()
+    .sort_values("cohort_weight_pct", ascending=False)
+)
+
+# Format nicely
+st.dataframe(
+    cohort_summary.style.format({
+        "cohort_weight_pct": "{:.2f}%"
+    }),
+    use_container_width=True
+)
+
+# --------------------------------------------------
 # FOOTER
 # --------------------------------------------------
 
