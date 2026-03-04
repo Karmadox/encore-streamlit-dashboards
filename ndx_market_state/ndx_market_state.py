@@ -167,116 +167,6 @@ if goog_mask.sum() == 2:
 st.title("📈 Nasdaq-100 — Market State")
 st.caption(f"As of end of day: {snapshot_date.strftime('%d %b %Y')}")
 
-# --------------------------------------------------
-# SYNTHETIC DISCLOSURE
-# --------------------------------------------------
-
-if not nq_row.empty and nq_index_level is not None:
-    nq_contracts = nq_row["quantity"].iloc[0]
-    direction = "Short" if nq_contracts < 0 else "Long"
-
-    st.markdown(f"""
-### 🧮 Synthetic Hedge Overlay
-
-We are currently **{direction} {abs(int(nq_contracts))} NQH6 contracts**
-
-• Index level used: {nq_index_level:,.2f}  
-• Contract multiplier: {NQ_MULTIPLIER}  
-• Total synthetic notional: {synthetic_index_notional:,.0f}
-""")
-
-# --------------------------------------------------
-# HOW TO READ
-# --------------------------------------------------
-
-with st.expander("ℹ️ How to read this chart"):
-    st.markdown("""
-Combines:
-
-• **Index structure** — Rank & weight inside the Nasdaq-100  
-• **Momentum** — 1D / 5D / 1M / YTD price change  
-• **Analyst expectations** — Target price & upside  
-• **Revision dynamics** — How analyst consensus is shifting  
-• **Real portfolio exposure** — Actual equity holdings  
-• **Synthetic NQ overlay** — Futures hedge apportioned by index weight  
-
----
-
-### 🔢 Core Concept
-
-**Net Exposure = Real Equity + Synthetic Allocation**
-
-Synthetic exposure distributes the NQ futures position proportionally across constituents based on index weight.
-
----
-
-## 📊 Revision Breadth (Primary Driver)
-
-Revision Breadth measures **net analyst agreement**:
-
-(Up Revisions − Down Revisions) / Analyst Count
-
-Interpretation:
-
-• +1.0 → All analysts revising up  
-•  0.0 → Balanced revisions  
-• −1.0 → All analysts revising down  
-
-Breadth captures **consensus direction**, not magnitude.
-
----
-
-## 📈 Target Δ (Magnitude)
-
-Target Delta shows the **percentage change in consensus price target** over 1M or 3M.
-
-It measures **size of expectation change**, not agreement.
-
-• Breadth = direction & agreement  
-• Target Δ = magnitude of change  
-
----
-
-## 🔔 Symbol Classification (Hybrid Model)
-
-Symbols primarily reflect **1M breadth**,  
-with extreme categories confirmed by target magnitude.
-
-### Positive Regimes
-
-• ▲▲▲ → Breadth ≥ +0.30 **and** Target Δ ≥ +5%  
-• ▲▲ → Breadth ≥ +0.10  
-• ▲ → Breadth > 0  
-
-### Negative Regimes
-
-• ▼▼▼ → Breadth ≤ −0.30 **and** Target Δ ≤ −5%  
-• ▼▼ → Breadth ≤ −0.10  
-• ▼ → Breadth < 0  
-
-No symbol = Neutral / mixed revision profile.
-
----
-
-## 🧠 How to Interpret
-
-• High breadth + rising targets → Strengthening conviction  
-• Positive breadth + small delta → Early expectation shift  
-• Large delta + weak breadth → Narrow / isolated revisions  
-• 3M confirming 1M → Structural shift  
-• 1M diverging from 3M → Potential turning point  
-• Broad ▼▼▼ across index → Deteriorating forward expectations  
-
----
-
-### 🧭 Institutional Framing
-
-Think of breadth as **consensus alignment**  
-and target delta as **intensity**.
-
-Strong regimes require both.
-""")
-
 st.divider()
 
 # --------------------------------------------------
@@ -299,6 +189,33 @@ c3.metric("% within 10% of high", f"{pct_near_high:.0f}%")
 c4.metric("Earnings ≤14d", earnings_14d)
 c5.metric("Real Exposure", f"{total_real:,.0f}")
 c6.metric("Net Exposure", f"{total_net:,.0f}")
+
+st.divider()
+
+# --------------------------------------------------
+# COHORT STRUCTURE SUMMARY
+# --------------------------------------------------
+
+st.subheader("🧱 Cohort Structure (% of Nasdaq-100)")
+
+cohort_structure = (
+    df.groupby("cohort_name", dropna=False)
+    .agg(total_weight=("index_weight_pct", "sum"))
+    .reset_index()
+    .sort_values("total_weight", ascending=False)
+)
+
+cohort_structure["cohort_pct"] = (
+    cohort_structure["total_weight"] / df["index_weight_pct"].sum() * 100
+)
+
+st.dataframe(
+    cohort_structure.style.format({
+        "total_weight": "{:.2f}%",
+        "cohort_pct": "{:.2f}%"
+    }),
+    use_container_width=True
+)
 
 st.divider()
 
@@ -331,6 +248,20 @@ if cohort_filter:
 filtered = filtered[filtered["index_rank"] <= max_rank]
 if earnings_filter:
     filtered = filtered[filtered["days_to_earnings"].between(0,14)]
+
+# --------------------------------------------------
+# SELECTED COHORT % METRIC
+# --------------------------------------------------
+
+if cohort_filter:
+    selected_weight = filtered["index_weight_pct"].sum()
+    total_weight = df["index_weight_pct"].sum()
+    selected_pct = selected_weight / total_weight * 100
+
+    st.metric(
+        "Selected Cohort % of Nasdaq-100",
+        f"{selected_pct:.2f}%"
+    )
 
 # --------------------------------------------------
 # MAIN TABLE
