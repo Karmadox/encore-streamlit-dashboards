@@ -193,33 +193,6 @@ c6.metric("Net Exposure", f"{total_net:,.0f}")
 st.divider()
 
 # --------------------------------------------------
-# COHORT STRUCTURE SUMMARY
-# --------------------------------------------------
-
-st.subheader("🧱 Cohort Structure (% of Nasdaq-100)")
-
-cohort_structure = (
-    df.groupby("cohort_name", dropna=False)
-    .agg(total_weight=("index_weight_pct", "sum"))
-    .reset_index()
-    .sort_values("total_weight", ascending=False)
-)
-
-cohort_structure["cohort_pct"] = (
-    cohort_structure["total_weight"] / df["index_weight_pct"].sum() * 100
-)
-
-st.dataframe(
-    cohort_structure.style.format({
-        "total_weight": "{:.2f}%",
-        "cohort_pct": "{:.2f}%"
-    }),
-    use_container_width=True
-)
-
-st.divider()
-
-# --------------------------------------------------
 # FILTERS
 # --------------------------------------------------
 
