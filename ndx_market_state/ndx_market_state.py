@@ -177,29 +177,6 @@ c6.metric("Net Exposure", f"{total_net:,.0f}")
 st.divider()
 
 # --------------------------------------------------
-# GLOBAL METRICS
-# --------------------------------------------------
-
-top5_weight = df.loc[df["index_rank"] <= 5, "index_weight_pct"].sum()
-top10_weight = df.loc[df["index_rank"] <= 10, "index_weight_pct"].sum()
-pct_near_high = (df["pct_from_52w_high"] >= -10).mean() * 100
-earnings_14d = df["days_to_earnings"].between(0,14).sum()
-
-total_real = df["real_value"].sum()
-total_synth = df["synthetic_value"].sum()
-total_net = df["net_position_value"].sum()
-
-c1,c2,c3,c4,c5,c6 = st.columns(6)
-c1.metric("Top 5 weight", f"{top5_weight:.1f}%")
-c2.metric("Top 10 weight", f"{top10_weight:.1f}%")
-c3.metric("% within 10% of high", f"{pct_near_high:.0f}%")
-c4.metric("Earnings ≤14d", earnings_14d)
-c5.metric("Real Exposure", f"{total_real:,.0f}")
-c6.metric("Net Exposure", f"{total_net:,.0f}")
-
-st.divider()
-
-# --------------------------------------------------
 # FILTERS
 # --------------------------------------------------
 
