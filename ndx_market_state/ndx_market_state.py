@@ -106,7 +106,7 @@ df["real_value"] = df["quantity"] * df["last_price"]
 NQ_MULTIPLIER = 20
 synthetic_index_notional = 0
 
-nq_row = positions[positions["ticker"].str.contains("NQH6", na=False)]
+nq_row = positions[positions["ticker"].str.startswith("NQ", na=False)]
 
 if not nq_row.empty and nq_index_level is not None:
     nq_contracts = nq_row["quantity"].iloc[0]
