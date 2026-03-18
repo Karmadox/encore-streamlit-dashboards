@@ -108,9 +108,21 @@ synthetic_index_notional = 0
 
 nq_row = positions[positions["ticker"].str.startswith("NQ", na=False)]
 
+net_contracts = 0
+synthetic_summary_text = "No NQ futures position"
+
 if not nq_row.empty and nq_index_level is not None:
-    nq_contracts = nq_row["quantity"].iloc[0]
-    synthetic_index_notional = nq_contracts * nq_index_level * NQ_MULTIPLIER
+
+    net_contracts = nq_row["quantity"].sum()
+
+    # Build contract text summary
+    contract_lines = []
+    for _, row in nq_row.iterrows():
+        contract_lines.append(f"{int(row['quantity'])} {row['ticker']}")
+
+    synthetic_summary_text = " / ".join(contract_lines)
+
+    synthetic_index_notional = net_contracts * nq_index_level * NQ_MULTIPLIER
 
 df["weight_decimal"] = df["index_weight_pct"] / 100
 df["synthetic_value"] = df["weight_decimal"] * synthetic_index_notional
@@ -121,51 +133,46 @@ df["synthetic_quantity"] = df["synthetic_quantity"].fillna(0)
 df["net_position_value"] = df["real_value"] + df["synthetic_value"]
 
 # --------------------------------------------------
-# COMBINE GOOG + GOOGL → GOOGL
-# --------------------------------------------------
-
-goog_mask = df["ticker"].isin(["GOOG", "GOOGL"])
-
-if goog_mask.sum() == 2:
-    goog_rows = df[goog_mask].copy()
-    combined = goog_rows.iloc[0].copy()
-    combined["ticker"] = "GOOGL"
-
-    sum_cols = [
-        "index_weight_pct","real_value","synthetic_value",
-        "net_position_value","quantity","synthetic_quantity"
-    ]
-
-    for col in sum_cols:
-        combined[col] = goog_rows[col].sum()
-
-    weight_col = "index_weight_pct"
-    revision_cols = [
-        "target_delta_1m_pct",
-        "target_delta_3m_pct",
-        "revision_breadth_1m",
-        "revision_breadth_3m"
-    ]
-
-    for col in revision_cols:
-        if col in df.columns:
-            weights = goog_rows[weight_col]
-            values = goog_rows[col]
-            combined[col] = (values * weights).sum() / weights.sum()
-
-    combined["analyst_count"] = goog_rows["analyst_count"].sum()
-    combined["index_rank"] = goog_rows["index_rank"].min()
-
-    df = df[~goog_mask]
-    df = pd.concat([df, pd.DataFrame([combined])], ignore_index=True)
-    df = df.sort_values("index_rank").reset_index(drop=True)
-
-# --------------------------------------------------
 # HEADER
 # --------------------------------------------------
 
 st.title("📈 Nasdaq-100 — Market State")
 st.caption(f"As of end of day: {snapshot_date.strftime('%d %b %Y')}")
+
+# --------------------------------------------------
+# SYNTHETIC OVERLAY SUMMARY (NEW SECTION)
+# --------------------------------------------------
+
+st.markdown("### 🧾 Synthetic Overlay")
+
+colA, colB, colC = st.columns(3)
+
+colA.metric("Contracts", synthetic_summary_text)
+colB.metric("Net NQ Contracts", f"{int(net_contracts)}")
+colC.metric("Synthetic Notional", f"{synthetic_index_notional:,.0f}")
+
+st.divider()
+
+# --------------------------------------------------
+# GLOBAL METRICS
+# --------------------------------------------------
+
+top5_weight = df.loc[df["index_rank"] <= 5, "index_weight_pct"].sum()
+top10_weight = df.loc[df["index_rank"] <= 10, "index_weight_pct"].sum()
+pct_near_high = (df["pct_from_52w_high"] >= -10).mean() * 100
+earnings_14d = df["days_to_earnings"].between(0,14).sum()
+
+total_real = df["real_value"].sum()
+total_synth = df["synthetic_value"].sum()
+total_net = df["net_position_value"].sum()
+
+c1,c2,c3,c4,c5,c6 = st.columns(6)
+c1.metric("Top 5 weight", f"{top5_weight:.1f}%")
+c2.metric("Top 10 weight", f"{top10_weight:.1f}%")
+c3.metric("% within 10% of high", f"{pct_near_high:.0f}%")
+c4.metric("Earnings ≤14d", earnings_14d)
+c5.metric("Real Exposure", f"{total_real:,.0f}")
+c6.metric("Net Exposure", f"{total_net:,.0f}")
 
 st.divider()
 
