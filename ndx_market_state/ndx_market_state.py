@@ -173,6 +173,12 @@ else:
     portfolio_trp = 0
 
 # --------------------------------------------------
+# HEDGE IMPACT
+# --------------------------------------------------
+
+hedge_impact = equity_trp - portfolio_trp
+
+# --------------------------------------------------
 # HEADER
 # --------------------------------------------------
 
@@ -193,9 +199,11 @@ colC.metric("Synthetic Notional", f"{synthetic_index_notional:,.0f}")
 
 st.divider()
 
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
+
 col1.metric("Equity TRP (Stock Book)", f"{equity_trp:.2f}%")
 col2.metric("Total TRP (Incl Overlay)", f"{portfolio_trp:.2f}%")
+col3.metric("Hedge Dampening Effect", f"{hedge_impact:.2f}%")
 
 # --------------------------------------------------
 # GLOBAL METRICS
@@ -371,7 +379,7 @@ cohort_trp = (
     .sort_values("weighted_trp", ascending=False)
 )
 
-st.subheader("📊 Cohort TRP Tension")
+st.subheader("📊 Cohort TRP Tension (Overlay Adjusted)")
 
 st.dataframe(
     cohort_trp.style.format({"weighted_trp": "{:.2f}%"}),
