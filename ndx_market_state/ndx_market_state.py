@@ -133,6 +133,29 @@ df["synthetic_quantity"] = df["synthetic_quantity"].fillna(0)
 df["net_position_value"] = df["real_value"] + df["synthetic_value"]
 
 # --------------------------------------------------
+# PORTFOLIO TRP TENSION (GROSS-WEIGHTED, DIRECTION-AWARE)
+# --------------------------------------------------
+
+trp_df = df.copy()
+
+# Only include actual exposure
+trp_df = trp_df[trp_df["net_position_value"] != 0]
+
+# Must have analyst target data
+trp_df = trp_df[trp_df["pct_to_best_target"].notna()]
+
+gross_exposure = trp_df["net_position_value"].abs().sum()
+
+if gross_exposure > 0:
+    portfolio_trp = (
+        (trp_df["net_position_value"] * trp_df["pct_to_best_target"])
+        .sum()
+        / gross_exposure
+    )
+else:
+    portfolio_trp = 0
+
+# --------------------------------------------------
 # HEADER
 # --------------------------------------------------
 
@@ -152,6 +175,9 @@ colB.metric("Net NQ Contracts", f"{int(net_contracts)}")
 colC.metric("Synthetic Notional", f"{synthetic_index_notional:,.0f}")
 
 st.divider()
+
+colD = st.columns(1)[0]
+colD.metric("Portfolio % to TRP (Gross-Weighted)", f"{portfolio_trp:.2f}%")
 
 # --------------------------------------------------
 # GLOBAL METRICS
@@ -310,6 +336,27 @@ st.dataframe(
     cohort_summary.style.format({
         "cohort_weight_pct": "{:.2f}%"
     }),
+    use_container_width=True
+)
+
+# --------------------------------------------------
+# COHORT TRP TENSION
+# --------------------------------------------------
+
+cohort_trp = (
+    trp_df.groupby("cohort_name")
+    .apply(lambda x: (
+        (x["net_position_value"] * x["pct_to_best_target"]).sum()
+        / x["net_position_value"].abs().sum()
+    ) if x["net_position_value"].abs().sum() > 0 else 0)
+    .reset_index(name="weighted_trp")
+    .sort_values("weighted_trp", ascending=False)
+)
+
+st.subheader("📊 Cohort TRP Tension")
+
+st.dataframe(
+    cohort_trp.style.format({"weighted_trp": "{:.2f}%"}),
     use_container_width=True
 )
 
