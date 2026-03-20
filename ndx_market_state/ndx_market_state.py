@@ -136,6 +136,23 @@ df["net_position_value"] = df["real_value"] + df["synthetic_value"]
 # PORTFOLIO TRP TENSION (GROSS-WEIGHTED, DIRECTION-AWARE)
 # --------------------------------------------------
 
+# --------------------------------------------------
+# EQUITY-ONLY TRP (STOCK BOOK)
+# --------------------------------------------------
+
+equity_df = df[df["real_value"] != 0].copy()
+equity_df = equity_df[equity_df["pct_to_best_target"].notna()]
+
+equity_gross_exposure = equity_df["real_value"].abs().sum()
+
+if equity_gross_exposure > 0:
+    equity_trp = (
+        (equity_df["real_value"] * equity_df["pct_to_best_target"]).sum()
+        / equity_gross_exposure
+    )
+else:
+    equity_trp = 0
+
 trp_df = df.copy()
 
 # Only include actual exposure
@@ -154,10 +171,6 @@ if gross_exposure > 0:
     )
 else:
     portfolio_trp = 0
-
-st.write("Gross exposure used in TRP:", gross_exposure)
-st.write("Sum real exposure:", df["real_value"].abs().sum())
-st.write("Sum net exposure:", df["net_position_value"].abs().sum())
 
 # --------------------------------------------------
 # HEADER
@@ -180,8 +193,9 @@ colC.metric("Synthetic Notional", f"{synthetic_index_notional:,.0f}")
 
 st.divider()
 
-colD = st.columns(1)[0]
-colD.metric("Portfolio % to TRP (Gross-Weighted)", f"{portfolio_trp:.2f}%")
+col1, col2 = st.columns(2)
+col1.metric("Equity TRP (Stock Book)", f"{equity_trp:.2f}%")
+col2.metric("Total TRP (Incl Overlay)", f"{portfolio_trp:.2f}%")
 
 # --------------------------------------------------
 # GLOBAL METRICS
