@@ -155,6 +155,10 @@ if gross_exposure > 0:
 else:
     portfolio_trp = 0
 
+st.write("Gross exposure used in TRP:", gross_exposure)
+st.write("Sum real exposure:", df["real_value"].abs().sum())
+st.write("Sum net exposure:", df["net_position_value"].abs().sum())
+
 # --------------------------------------------------
 # HEADER
 # --------------------------------------------------
