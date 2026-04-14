@@ -415,7 +415,11 @@ TRADING_END   = time(15, 59, 59)
 intraday["snapshot_ts"] = pd.to_datetime(intraday["snapshot_ts"], utc=True)
 
 # Convert once to CST (authoritative timestamp)
-intraday["snapshot_cst"] = intraday["snapshot_ts"].dt.tz_convert("US/Central")
+try:
+    intraday["snapshot_cst"] = intraday["snapshot_ts"].dt.tz_convert("America/Chicago")
+except Exception:
+    # fallback: keep UTC if timezone database missing
+    intraday["snapshot_cst"] = intraday["snapshot_ts"]
 
 # Filter to selected CST date
 intraday = intraday[
