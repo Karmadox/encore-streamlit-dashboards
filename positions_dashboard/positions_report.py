@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import psycopg2
 from streamlit_autorefresh import st_autorefresh
-from datetime import date
+from datetime import date, datetime
 import streamlit.components.v1 as components
 import streamlit as st
 
