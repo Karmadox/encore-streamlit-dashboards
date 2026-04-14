@@ -828,10 +828,9 @@ elif active_tab == "📈 Price Change Driven":
         .reindex(index=BUCKET_ORDER, columns=TIME_GRID)
     )
 
-    from datetime import datetime
-    import pytz
-
-    now_cst = datetime.now(pytz.timezone("US/Central")).strftime("%H:%M")
+    from zoneinfo import ZoneInfo
+    
+    now_cst = datetime.now(ZoneInfo("America/Chicago")).strftime("%H:%M")
 
     past_cols = [c for c in bucket_table.columns if c <= now_cst]
     future_cols = [c for c in bucket_table.columns if c > now_cst]
