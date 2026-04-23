@@ -45,7 +45,6 @@ st.set_page_config(
 # DATABASE CONNECTION
 # -------------------------------------------------
 
-@st.cache_resource
 def get_connection():
     return psycopg2.connect(
         dbname=st.secrets["db"]["dbname"],
@@ -57,8 +56,18 @@ def get_connection():
 
 @st.cache_data(ttl=300)
 def run_query(query):
-    conn = get_connection()
-    return pd.read_sql(query, conn)
+    conn = None
+    try:
+        conn = get_connection()
+        df = pd.read_sql(query, conn)
+        return df
+    except Exception as e:
+        if conn is not None:
+            conn.rollback()   # Clear failed transaction state
+        raise e
+    finally:
+        if conn is not None:
+            conn.close()      # Always close connection
 
 # -------------------------------------------------
 # HEADER
