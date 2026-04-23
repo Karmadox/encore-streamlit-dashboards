@@ -195,23 +195,8 @@ st.divider()
 st.subheader("📊 Rolling 30-Day R²")
 
 rolling = run_query("""
-WITH dates AS (
-    SELECT DISTINCT date
-    FROM encoredb.portfolio_factor_attribution_summary
-    WHERE date >= '2026-01-01'
-),
-rolling AS (
-    SELECT
-        d.date AS end_date,
-        a.model_name,
-        CORR(a.total_factor_return, a.actual_return)^2 AS rolling_r2
-    FROM dates d
-    JOIN encoredb.portfolio_factor_attribution_summary a
-      ON a.date BETWEEN d.date - INTERVAL '29 days' AND d.date
-    GROUP BY d.date, a.model_name
-)
 SELECT *
-FROM rolling
+FROM encoredb.portfolio_rolling_r2
 WHERE end_date >= '2026-02-01'
 ORDER BY end_date
 """)
