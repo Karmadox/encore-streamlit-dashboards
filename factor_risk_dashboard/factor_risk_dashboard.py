@@ -109,7 +109,7 @@ st.divider()
 # -------------------------------------------------
 
 latest_date = run_query(
-    "SELECT MAX(date) AS max_date FROM encoredb.portfolio_factor_attribution_summary"
+    "SELECT MAX(date) AS max_date FROM encoredb.portfolio_factor_attribution_summary_mv"
 )["max_date"][0]
 
 st.subheader(f"📅 Latest Available Date: {latest_date}")
@@ -122,7 +122,7 @@ st.subheader("🔎 Current Snapshot")
 
 snapshot = run_query(f"""
 SELECT *
-FROM encoredb.portfolio_factor_attribution_summary
+FROM encoredb.portfolio_factor_attribution_summary_mv
 WHERE date = '{latest_date}'
 ORDER BY model_name
 """)
