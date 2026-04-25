@@ -82,94 +82,71 @@ st.divider()
 
 with st.expander("📘 How to Read This View", expanded=True):
 
+    st.markdown("## Model Definitions")
+
+    st.markdown("**US4AxiomaMH**  \n"
+                "Medium-Horizon fundamental risk model.  \n"
+                "Designed to explain risk and returns over multi-month horizons using structural style and industry factors.")
+
+    st.markdown("**US4AxiomaSH**  \n"
+                "Short-Horizon statistical risk model.  \n"
+                "Designed to capture shorter-term return dynamics, including additional statistical and short-term momentum factors.")
+
     st.markdown("""
-    ## Model Definitions
-
-    **US4AxiomaMH**  
-    Medium-Horizon fundamental risk model.  
-    Designed to explain risk and returns over multi-month horizons using structural style and industry factors.
-
-    **US4AxiomaSH**  
-    Short-Horizon statistical risk model.  
-    Designed to capture shorter-term return dynamics, including additional statistical and short-term momentum factors.
-
     Comparing the two models helps assess whether performance is driven by:
     - Longer-term structural exposures (MH)
-    - Shorter-term statistical / tactical effects (SH)
+    - Shorter-term tactical or statistical effects (SH)
+    """)
 
-    ---
+    st.divider()
 
-    ## Exposure Definitions
+    st.markdown("## Exposure Definitions")
 
-    ### NAV Normalized Exposure
-
-    $$
-    \frac{\sum ( \text{NMV}_i \times \text{Factor Exposure}_i )}{\text{Portfolio NAV}}
-    $$
-
+    st.markdown("### NAV Normalized Exposure")
+    st.latex(r"\frac{\sum (NMV_i \times Exposure_i)}{Portfolio\ NAV}")
+    st.markdown("""
     Measures how much portfolio capital is exposed to each factor.
 
-    • Positive value → Net long exposure to the factor  
-    • Negative value → Net short exposure  
-    • Magnitude reflects capital-weighted sensitivity  
+    - Positive → Net long exposure  
+    - Negative → Net short exposure  
+    - Magnitude reflects capital-weighted sensitivity  
+    """)
 
-    ---
-
-    ### Gross Normalized Exposure
-
-    $$
-    \frac{\sum ( |\text{GMV}_i| \times \text{Factor Exposure}_i )}{\sum |\text{GMV}_i|}
-    $$
-
+    st.markdown("### Gross Normalized Exposure")
+    st.latex(r"\frac{\sum (|GMV_i| \times Exposure_i)}{\sum |GMV_i|}")
+    st.markdown("""
     Measures factor intensity independent of capital direction.
 
-    • Ignores long vs short sign  
-    • Reflects how strongly the book is positioned around a factor  
-    • Useful for understanding structural risk concentration  
+    - Ignores long vs short sign  
+    - Reflects structural risk concentration  
+    """)
 
-    ---
+    st.divider()
 
-    ## Return Attribution
+    st.markdown("## Return Attribution")
 
-    ### Daily Factor Contribution
+    st.markdown("### Daily Factor Contribution")
+    st.latex(r"NAV\ Exposure \times Daily\ Factor\ Return")
+    st.markdown("Explains how much each factor contributed to portfolio return.")
 
-    $$
-    \text{NAV Exposure} \times \text{Daily Factor Return}
-    $$
+    st.markdown("### Specific Return")
+    st.latex(r"Actual\ Return - Total\ Factor\ Return")
+    st.markdown("""
+    Measures stock-specific (idiosyncratic) performance.
 
-    Explains how much each factor contributed to portfolio return on a given day.
+    - Positive → Alpha beyond factor positioning  
+    - Negative → Underperformance relative to exposures  
+    """)
 
-    Summing across all factors gives:
+    st.divider()
 
-    $$
-    \text{Total Factor Return}
-    $$
+    st.markdown("## Rolling 30-Day R²")
+    st.latex(r"R^2 = Corr(Factor\ Return,\ Actual\ Return)^2")
+    st.markdown("""
+    Measures how much of return variance is explained by systematic factors over the past 30 trading days.
 
-    ---
-
-    ### Specific Return
-
-    $$
-    \text{Actual Return} - \text{Total Factor Return}
-    $$
-
-    Measures idiosyncratic (stock-specific) performance not explained by the factor model.
-
-    • Positive → Alpha beyond factor exposures  
-    • Negative → Underperformance relative to factor positioning  
-
-    ---
-
-    ## Rolling 30-Day $R^2$
-
-    $$
-    R^2 = \text{Correlation}^2(\text{Factor Return}, \text{Actual Return})
-    $$
-
-    Measures how much of daily return variance is explained by systematic factors over the past 30 trading days.
-
-    • Higher $R^2$ → Returns are largely factor-driven  
-    • Lower $R^2$ → Returns are more idiosyncratic  
+    - Higher R² → Returns are factor-driven  
+    - Lower R² → Returns are more idiosyncratic  
     """)
     
     st.divider()
