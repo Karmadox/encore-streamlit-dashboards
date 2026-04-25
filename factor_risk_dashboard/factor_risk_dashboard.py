@@ -83,35 +83,96 @@ st.divider()
 with st.expander("📘 How to Read This View", expanded=True):
 
     st.markdown("""
+    ## Model Definitions
+
+    **US4AxiomaMH**  
+    Medium-Horizon fundamental risk model.  
+    Designed to explain risk and returns over multi-month horizons using structural style and industry factors.
+
+    **US4AxiomaSH**  
+    Short-Horizon statistical risk model.  
+    Designed to capture shorter-term return dynamics, including additional statistical and short-term momentum factors.
+
+    Comparing the two models helps assess whether performance is driven by:
+    - Longer-term structural exposures (MH)
+    - Shorter-term statistical / tactical effects (SH)
+
+    ---
+
+    ## Exposure Definitions
+
     ### NAV Normalized Exposure
-    \[
-    \sum (NMV × Factor Exposure) ÷ NAV
-    \]
-    Shows how portfolio capital is exposed to each factor.
+
+    $$
+    \frac{\sum ( \text{NMV}_i \times \text{Factor Exposure}_i )}{\text{Portfolio NAV}}
+    $$
+
+    Measures how much portfolio capital is exposed to each factor.
+
+    • Positive value → Net long exposure to the factor  
+    • Negative value → Net short exposure  
+    • Magnitude reflects capital-weighted sensitivity  
+
+    ---
 
     ### Gross Normalized Exposure
-    \[
-    \sum (|GMV| × Exposure) ÷ \sum |GMV|
-    \]
-    Shows risk intensity independent of capital direction.
+
+    $$
+    \frac{\sum ( |\text{GMV}_i| \times \text{Factor Exposure}_i )}{\sum |\text{GMV}_i|}
+    $$
+
+    Measures factor intensity independent of capital direction.
+
+    • Ignores long vs short sign  
+    • Reflects how strongly the book is positioned around a factor  
+    • Useful for understanding structural risk concentration  
+
+    ---
+
+    ## Return Attribution
 
     ### Daily Factor Contribution
-    \[
-    NAV Exposure × Daily Factor Return
-    \]
-    Explains how much each factor contributed to daily portfolio return.
+
+    $$
+    \text{NAV Exposure} \times \text{Daily Factor Return}
+    $$
+
+    Explains how much each factor contributed to portfolio return on a given day.
+
+    Summing across all factors gives:
+
+    $$
+    \text{Total Factor Return}
+    $$
+
+    ---
 
     ### Specific Return
-    \[
-    Actual Return − Total Factor Return
-    \]
-    Measures idiosyncratic / stock-specific performance.
 
-    ### Rolling 30-Day R²
-    Measures how much of daily return variance is explained by systematic factors.
+    $$
+    \text{Actual Return} - \text{Total Factor Return}
+    $$
+
+    Measures idiosyncratic (stock-specific) performance not explained by the factor model.
+
+    • Positive → Alpha beyond factor exposures  
+    • Negative → Underperformance relative to factor positioning  
+
+    ---
+
+    ## Rolling 30-Day $R^2$
+
+    $$
+    R^2 = \text{Correlation}^2(\text{Factor Return}, \text{Actual Return})
+    $$
+
+    Measures how much of daily return variance is explained by systematic factors over the past 30 trading days.
+
+    • Higher $R^2$ → Returns are largely factor-driven  
+    • Lower $R^2$ → Returns are more idiosyncratic  
     """)
-
-st.divider()
+    
+    st.divider()
 
 # -------------------------------------------------
 # DATE FILTER
