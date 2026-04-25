@@ -250,8 +250,19 @@ ORDER BY end_date
 
 st.dataframe(rolling, use_container_width=True)
 
-st.line_chart(
-    rolling.pivot(index="end_date", columns="model_name", values="rolling_r2")
+st.markdown("### Rolling 30-Day R² — Systematic vs Idiosyncratic Regime")
+
+chart_data = rolling.pivot(
+    index="end_date",
+    columns="model_name",
+    values="rolling_r2"
+)
+
+st.line_chart(chart_data)
+
+st.caption(
+    "Higher R² indicates returns are primarily factor-driven. "
+    "Lower R² indicates greater idiosyncratic (stock-specific) influence."
 )
 
 st.divider()
