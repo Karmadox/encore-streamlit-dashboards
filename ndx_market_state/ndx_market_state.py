@@ -44,17 +44,23 @@ def get_conn():
 
 @st.cache_data(ttl=300)
 def load_latest_snapshot_date():
-    sql = "SELECT MAX(snapshot_date) FROM encoredb.ndx_market_snapshot"
+    sql = "SELECT MAX(snapshot_date) FROM encoredb.index_market_snapshot WHERE index_name = 'NDX'"
     with get_conn() as conn:
         return pd.read_sql(sql, conn).iloc[0, 0]
 
 @st.cache_data(ttl=300)
 def load_market_state(snapshot_date):
     sql = """
-        SELECT *
-        FROM encoredb.v_ndx_canonical_market_state_enriched
-        WHERE snapshot_date = %s
-        ORDER BY index_rank
+        SELECT
+            s.*,
+            i.ticker,
+            i.name
+        FROM encoredb.index_market_snapshot s
+        JOIN encoredb.instruments i
+        ON i.instrument_id = s.instrument_id
+        WHERE s.index_name = 'NDX'
+        AND s.snapshot_date = %s
+        ORDER BY s.index_rank
     """
     with get_conn() as conn:
         return pd.read_sql(sql, conn, params=(snapshot_date,))
