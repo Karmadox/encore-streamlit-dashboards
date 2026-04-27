@@ -51,20 +51,15 @@ def load_latest_snapshot_date():
 @st.cache_data(ttl=300)
 def load_market_state(snapshot_date):
     sql = """
-        SELECT
-            s.*,
-            i.ticker,
-            i.name
-        FROM encoredb.index_market_snapshot s
-        JOIN encoredb.instruments i
-        ON i.instrument_id = s.instrument_id
-        WHERE s.index_name = 'NDX'
-        AND s.snapshot_date = %s
-        ORDER BY s.index_rank
+        SELECT *
+        FROM encoredb.v_index_canonical_market_state_enriched
+        WHERE index_name = 'NDX'
+        AND snapshot_date = %s
+        ORDER BY index_rank
     """
     with get_conn() as conn:
         return pd.read_sql(sql, conn, params=(snapshot_date,))
-
+        
 @st.cache_data(ttl=60)
 def load_positions():
     sql = """
