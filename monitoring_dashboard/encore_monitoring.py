@@ -173,7 +173,6 @@ def load_security_master_issues():
 # ENTERPRISE TASK MONITORING
 # --------------------------------------------------
 
-@st.cache_data(ttl=60)
 def load_task_status():
 
     sql = """
