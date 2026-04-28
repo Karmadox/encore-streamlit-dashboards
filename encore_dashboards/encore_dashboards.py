@@ -303,6 +303,42 @@ with col6:
     )
 
 # -------------------------------------------------
+# ROW 3 — RISK & EVENTS
+# -------------------------------------------------
+
+col7, col8, col9 = st.columns(3)
+
+with col7:
+    st.markdown(
+        """
+        <div class="dashboard-card">
+            <div class="dashboard-title">📅 Portfolio Earnings Calendar</div>
+            <div class="dashboard-subtitle">
+                Centralized view of upcoming earnings across current portfolio holdings.
+            </div>
+            <ul class="dashboard-list">
+                <li>Sorted upcoming earnings dates</li>
+                <li>Historical daily snapshot tracking</li>
+                <li>Missing earnings visibility</li>
+                <li>Downloadable calendar</li>
+            </ul>
+            <div class="dashboard-link">
+                👉 <a href="https://encore-earnings-dashboard.streamlit.app" target="_blank">
+                    Open Earnings Dashboard
+                </a>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+with col8:
+    st.empty()
+
+with col9:
+    st.empty()
+    
+# -------------------------------------------------
 # FOOTER
 # -------------------------------------------------
 
