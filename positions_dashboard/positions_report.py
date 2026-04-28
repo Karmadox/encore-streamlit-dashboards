@@ -406,9 +406,6 @@ def render_heatmap(df, title):
 # LOAD DATA
 # -------------------------------------------------
 intraday = load_intraday(selected_date)
-st.write("🔍 Raw intraday shape:", intraday.shape)
-st.write("Min snapshot_ts:", intraday["snapshot_ts"].min())
-st.write("Max snapshot_ts:", intraday["snapshot_ts"].max())
 
 from datetime import time
 
@@ -429,8 +426,6 @@ intraday = intraday[
     intraday["snapshot_cst"].dt.date == selected_date
 ].copy()
 
-st.write("🔎 After CST date filter:", intraday.shape)
-
 # Filter to regular trading hours (09:00–15:00 CST)
 intraday = intraday[
     intraday["snapshot_cst"].dt.time.between(
@@ -438,8 +433,6 @@ intraday = intraday[
         TRADING_END
     )
 ].copy()
-
-st.write("⏰ After trading hours filter:", intraday.shape)
 
 # Fixed 30-minute buckets for heatmaps
 intraday["time_label"] = (
