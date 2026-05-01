@@ -333,11 +333,32 @@ with col7:
     )
 
 with col8:
-    st.empty()
+    st.markdown(
+        """
+        <div class="dashboard-card">
+            <div class="dashboard-title">📊 Factor Risk Dashboard</div>
+            <div class="dashboard-subtitle">
+                Systematic factor exposure, attribution, and rolling R² analysis powered by Axioma.
+            </div>
+            <ul class="dashboard-list">
+                <li>Daily NAV-normalized factor exposure</li>
+                <li>Factor return contribution breakdown</li>
+                <li>Style vs Industry bucket attribution</li>
+                <li>Rolling 30-day factor explanatory power (R²)</li>
+            </ul>
+            <div class="dashboard-link">
+                👉 <a href="https://factor-risk-dashboard.streamlit.app/" target="_blank">
+                    Open Factor Risk Dashboard
+                </a>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 with col9:
     st.empty()
-    
+
 # -------------------------------------------------
 # FOOTER
 # -------------------------------------------------
