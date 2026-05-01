@@ -55,13 +55,11 @@ def get_connection():
         port=st.secrets["db"]["port"],
     )
 
-# Cached for performance
 @st.cache_data(ttl=300)
 def run_query(query):
     conn = get_connection()
     return pd.read_sql(query, conn)
 
-# NOT cached (always fresh)
 def run_query_no_cache(query):
     conn = get_connection()
     return pd.read_sql(query, conn)
@@ -85,40 +83,7 @@ st.caption(f"Last app refresh: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 st.divider()
 
 # -------------------------------------------------
-# HOW TO READ THIS VIEW
-# -------------------------------------------------
-
-with st.expander("📘 How to Read This View", expanded=True):
-
-    st.markdown("""
-    ### NAV Normalized Exposure
-    \[
-    \sum (NMV × Factor Exposure) ÷ NAV
-    \]
-
-    ### Gross Normalized Exposure
-    \[
-    \sum (|GMV| × Exposure) ÷ \sum |GMV|
-    \]
-
-    ### Daily Factor Contribution
-    \[
-    NAV Exposure × Daily Factor Return
-    \]
-
-    ### Specific Return
-    \[
-    Actual Return − Total Factor Return
-    \]
-
-    ### Rolling 30-Day R²
-    Measures how much of daily return variance is explained by systematic factors.
-    """)
-
-st.divider()
-
-# -------------------------------------------------
-# DATE FILTER (NO CACHE HERE)
+# DATE FILTER (NO CACHE)
 # -------------------------------------------------
 
 latest_date = run_query_no_cache(
@@ -202,31 +167,24 @@ st.download_button(
 st.divider()
 
 # -------------------------------------------------
-# ROLLING R²
+# ROLLING R² (OPTIMIZED — NO SELF JOIN)
 # -------------------------------------------------
 
 st.subheader("📊 Rolling 30-Day R²")
 
 rolling = run_query("""
-WITH dates AS (
-    SELECT DISTINCT date
-    FROM encoredb.portfolio_factor_attribution_summary
-    WHERE date >= '2026-01-01'
-),
-rolling AS (
-    SELECT
-        d.date AS end_date,
-        a.model_name,
-        CORR(a.total_factor_return, a.actual_return)^2 AS rolling_r2
-    FROM dates d
-    JOIN encoredb.portfolio_factor_attribution_summary a
-      ON a.date BETWEEN d.date - INTERVAL '29 days' AND d.date
-    GROUP BY d.date, a.model_name
-)
-SELECT *
-FROM rolling
-WHERE end_date >= '2026-02-01'
-ORDER BY end_date
+SELECT
+    date AS end_date,
+    model_name,
+    CORR(total_factor_return, actual_return)
+        OVER (
+            PARTITION BY model_name
+            ORDER BY date
+            ROWS BETWEEN 29 PRECEDING AND CURRENT ROW
+        )^2 AS rolling_r2
+FROM encoredb.portfolio_factor_attribution_summary
+WHERE date >= '2026-01-01'
+ORDER BY date
 """)
 
 st.dataframe(rolling, use_container_width=True)
