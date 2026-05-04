@@ -68,12 +68,17 @@ def format_event_table(df):
     if df.empty:
         return df
 
-    for col in ["ret_1d","ret_1w","ret_1m","ret_3m"]:
+    percent_cols = ["ret_1d", "ret_1w", "ret_1m", "ret_3m"]
+    dollar_cols = ["pnl_1m", "pnl_3m", "position_value"]
+
+    for col in percent_cols:
         if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
             df[col] = (df[col] * 100).round(2)
 
-    for col in ["pnl_1m","pnl_3m","position_value"]:
+    for col in dollar_cols:
         if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
             df[col] = df[col].round(0)
 
     return df
