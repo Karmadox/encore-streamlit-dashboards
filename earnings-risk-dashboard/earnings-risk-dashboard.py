@@ -64,6 +64,7 @@ def run_query(query):
 # =================================================
 
 def format_event_table(df):
+
     if df.empty:
         return df
 
@@ -77,15 +78,16 @@ def format_event_table(df):
 
     return df
 
+
 # =================================================
-# LAST QUARTER
+# DATE DEFINITIONS
 # =================================================
 
 last_quarter_start = "2026-01-01"
 last_quarter_end   = "2026-03-31"
 
 # =================================================
-# CORE EVENT ENGINE (1D/1W/1M/3M)
+# CORE EVENT ENGINE (1D / 1W / 1M / 3M)
 # =================================================
 
 base_event_cte = """
@@ -148,33 +150,7 @@ event_prices as (
 """
 
 # =================================================
-# SECTION 1 — EXECUTIVE SUMMARY
-# =================================================
-
-st.header("Executive Summary – Last Quarter")
-
-summary_query = base_event_cte + f"""
-select
-    sum(pos.fair_value * (ep.px_1m / ep.px_t - 1)) as total_pnl_1m,
-    sum(pos.fair_value * (ep.px_3m / ep.px_t - 1)) as total_pnl_3m,
-    count(*) as number_of_events
-from event_prices ep
-join encoredb.portfoliohistory pos
-    on pos.ticker = ep.ticker
-   and pos.date = ep.anchor_date
-where ep.earnings_date between '{last_quarter_start}' and '{last_quarter_end}'
-"""
-
-summary = run_query(summary_query)
-
-if not summary.empty:
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Earnings P&L (1m)", f"${summary['total_pnl_1m'][0]:,.0f}")
-    col2.metric("Total Earnings P&L (3m)", f"${summary['total_pnl_3m'][0]:,.0f}")
-    col3.metric("Number of Events", int(summary['number_of_events'][0]))
-
-# =================================================
-# SECTION 2 — EVENT DETAIL
+# SECTION 1 — LAST QUARTER EVENTS
 # =================================================
 
 st.header("Last Quarter Earnings Events")
@@ -199,10 +175,38 @@ order by pnl_1m desc
 """
 
 events_df = format_event_table(run_query(events_query))
-st.dataframe(events_df, height=500, use_container_width=False)
+st.dataframe(events_df, height=450, use_container_width=False)
 
 # =================================================
-# SECTION 3 — STRUCTURAL EARNINGS PROFILE
+# SECTION 2 — THIS QUARTER REPORTED SO FAR
+# =================================================
+
+st.header("This Quarter – Reported Earnings So Far")
+
+this_q_query = base_event_cte + """
+select
+    ep.ticker,
+    ep.earnings_date,
+    pos.fair_value as position_value,
+    (ep.px_1d / ep.px_t - 1) as ret_1d,
+    (ep.px_1w / ep.px_t - 1) as ret_1w,
+    (ep.px_1m / ep.px_t - 1) as ret_1m,
+    (ep.px_3m / ep.px_t - 1) as ret_3m,
+    pos.fair_value * (ep.px_1m / ep.px_t - 1) as pnl_1m
+from event_prices ep
+join encoredb.portfoliohistory pos
+    on pos.ticker = ep.ticker
+   and pos.date = ep.anchor_date
+where date_trunc('quarter', ep.earnings_date) =
+      date_trunc('quarter', current_date)
+order by ep.earnings_date desc
+"""
+
+this_q_df = format_event_table(run_query(this_q_query))
+st.dataframe(this_q_df, height=400, use_container_width=False)
+
+# =================================================
+# SECTION 3 — STRUCTURAL PROFILE
 # =================================================
 
 st.header("Structural Earnings Profile (Trailing History)")
@@ -231,7 +235,7 @@ if not profile_df.empty:
 st.dataframe(profile_df, height=400, use_container_width=False)
 
 # =================================================
-# SECTION 4 — UPCOMING RISK (WITH STRUCTURAL FLAG)
+# SECTION 4 — UPCOMING EARNINGS RISK
 # =================================================
 
 st.header("Upcoming Earnings Risk Exposure (Next 30 Days)")
@@ -272,8 +276,10 @@ st.markdown("---")
 st.markdown("## Strategic Takeaways")
 
 st.markdown("""
-- 1D / 1W / 1M / 3M forward earnings convexity now tracked.
-- Structural earnings profile identifies persistent convexity bias.
+- Full 1D / 1W / 1M / 3M earnings convexity tracked.
+- Last quarter fully mapped vs holdings.
+- This quarter earnings performance tracked live.
+- Structural convexity profile identifies persistent bias.
 - Upcoming exposure quantifies real-time earnings risk.
-- Dashboard now supports proactive position sizing decisions.
+- Dashboard now fully supports proactive earnings position management.
 """)
