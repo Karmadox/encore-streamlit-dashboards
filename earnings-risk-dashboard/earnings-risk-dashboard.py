@@ -66,7 +66,7 @@ last_quarter_end   = "2026-03-31"
 # CORE EVENT ENGINE (ANCHOR + TRADING DAYS)
 # =================================================
 
-base_event_cte = f"""
+base_event_cte = """
 with earnings_events as (
 
     select
@@ -121,7 +121,6 @@ event_prices as (
         on p0.instrument_id = ev.instrument_id
        and p0.trade_date = ev.anchor_date
 )
-
 """
 
 # =================================================
@@ -132,19 +131,20 @@ st.header("Executive Summary – Last Quarter")
 
 summary_query = base_event_cte + f"""
 select
-    sum(pos.fair_value * (px_1m / px_t - 1)) as total_pnl,
-    stddev(pos.fair_value * (px_1m / px_t - 1)) * sqrt(count(*)) as quarter_volatility_estimate,
+    sum(pos.fair_value * (ep.px_1m / ep.px_t - 1)) as total_pnl,
+    stddev(pos.fair_value * (ep.px_1m / ep.px_t - 1)) * sqrt(count(*)) as quarter_volatility_estimate,
     count(*) as number_of_events
 from event_prices ep
 join encoredb.portfoliohistory pos
     on pos.ticker = ep.ticker
    and pos.date = ep.anchor_date
 where ep.earnings_date between '{last_quarter_start}' and '{last_quarter_end}'
+  and ep.px_1m is not null
 """
 
 summary = run_query(summary_query)
 
-if not summary.empty:
+if not summary.empty and summary["number_of_events"].iloc[0] > 0:
     total_pnl = summary["total_pnl"].iloc[0]
     vol_est = summary["quarter_volatility_estimate"].iloc[0]
     events = summary["number_of_events"].iloc[0]
@@ -166,13 +166,13 @@ st.header("Last Quarter Earnings Events")
 
 events_query = base_event_cte + f"""
 select
-    ticker,
-    earnings_date,
+    ep.ticker,
+    ep.earnings_date,
     pos.fair_value as position_value,
-    (px_1d / px_t - 1) as ret_1d,
-    (px_1w / px_t - 1) as ret_1w,
-    (px_1m / px_t - 1) as ret_1m,
-    pos.fair_value * (px_1m / px_t - 1) as pnl_1m
+    (ep.px_1d / ep.px_t - 1) as ret_1d,
+    (ep.px_1w / ep.px_t - 1) as ret_1w,
+    (ep.px_1m / ep.px_t - 1) as ret_1m,
+    pos.fair_value * (ep.px_1m / ep.px_t - 1) as pnl_1m
 from event_prices ep
 join encoredb.portfoliohistory pos
     on pos.ticker = ep.ticker
@@ -193,17 +193,18 @@ st.header("Structural Earnings Profile (Trailing History)")
 
 profile_query = base_event_cte + """
 select
-    ticker,
-    avg(pos.fair_value * (px_1m / px_t - 1)) as avg_event_pnl,
-    stddev(pos.fair_value * (px_1m / px_t - 1)) as pnl_vol,
-    avg(pos.fair_value * (px_1m / px_t - 1)) /
-        nullif(stddev(pos.fair_value * (px_1m / px_t - 1)),0) as pnl_sharpe_proxy,
+    ep.ticker,
+    avg(pos.fair_value * (ep.px_1m / ep.px_t - 1)) as avg_event_pnl,
+    stddev(pos.fair_value * (ep.px_1m / ep.px_t - 1)) as pnl_vol,
+    avg(pos.fair_value * (ep.px_1m / ep.px_t - 1)) /
+        nullif(stddev(pos.fair_value * (ep.px_1m / ep.px_t - 1)),0) as pnl_sharpe_proxy,
     count(*) as events
 from event_prices ep
 join encoredb.portfoliohistory pos
     on pos.ticker = ep.ticker
    and pos.date = ep.anchor_date
-group by ticker
+where ep.px_1m is not null
+group by ep.ticker
 having count(*) >= 2
 order by pnl_sharpe_proxy
 """
