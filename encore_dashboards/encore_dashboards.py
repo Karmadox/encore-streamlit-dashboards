@@ -336,6 +336,31 @@ with col8:
     st.markdown(
         """
         <div class="dashboard-card">
+            <div class="dashboard-title">📊 Earnings Risk Management</div>
+            <div class="dashboard-subtitle">
+                Quantitative analysis of post-earnings convexity, structural bias,
+                and forward earnings exposure across the portfolio.
+            </div>
+            <ul class="dashboard-list">
+                <li>1D / 1W / 1M / 3M post-earnings return mapping</li>
+                <li>Position-weighted earnings P&L attribution</li>
+                <li>Structural convexity profile by ticker</li>
+                <li>Upcoming earnings risk exposure (next 30 days)</li>
+            </ul>
+            <div class="dashboard-link">
+                👉 <a href="https://encore-earnings-risk-dashboard.streamlit.app/" target="_blank">
+                    Open Earnings Risk Dashboard
+                </a>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+with col9:
+    st.markdown(
+        """
+        <div class="dashboard-card">
             <div class="dashboard-title">📊 Factor Risk Dashboard</div>
             <div class="dashboard-subtitle">
                 Systematic factor exposure, attribution, and rolling R² analysis powered by Axioma.
@@ -355,10 +380,7 @@ with col8:
         """,
         unsafe_allow_html=True,
     )
-
-with col9:
-    st.empty()
-
+    
 # -------------------------------------------------
 # FOOTER
 # -------------------------------------------------
