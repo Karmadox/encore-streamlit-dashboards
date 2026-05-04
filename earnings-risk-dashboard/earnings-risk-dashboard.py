@@ -44,6 +44,15 @@ st.set_page_config(
 
 st.title("📊 Earnings Risk Management Dashboard")
 
+# Reduce dataframe font size
+st.markdown("""
+<style>
+div[data-testid="stDataFrame"] {
+    font-size: 0.85rem;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # =================================================
 # DATABASE CONNECTION
 # =================================================
@@ -56,6 +65,28 @@ def run_query(query):
     return df
 
 # =================================================
+# TABLE FORMATTER
+# =================================================
+
+def format_event_table(df):
+
+    if df.empty:
+        return df
+
+    for col in ["ret_1d", "ret_1w", "ret_1m"]:
+        if col in df.columns:
+            df[col] = (df[col] * 100).round(2)
+
+    if "pnl_1m" in df.columns:
+        df["pnl_1m"] = df["pnl_1m"].round(0)
+
+    if "position_value" in df.columns:
+        df["position_value"] = df["position_value"].round(0)
+
+    return df
+
+
+# =================================================
 # DEFINE LAST QUARTER
 # =================================================
 
@@ -63,7 +94,7 @@ last_quarter_start = "2026-01-01"
 last_quarter_end   = "2026-03-31"
 
 # =================================================
-# CORE EVENT ENGINE (ANCHOR + TRADING DAYS)
+# CORE EVENT ENGINE
 # =================================================
 
 base_event_cte = """
@@ -181,9 +212,22 @@ where ep.earnings_date between '{last_quarter_start}' and '{last_quarter_end}'
 order by pnl_1m desc
 """
 
-events_df = run_query(events_query)
+events_df = format_event_table(run_query(events_query))
 
-st.dataframe(events_df, use_container_width=True)
+st.dataframe(
+    events_df,
+    height=500,
+    column_config={
+        "ticker": st.column_config.TextColumn(width="small"),
+        "earnings_date": st.column_config.DateColumn(width="small"),
+        "position_value": st.column_config.NumberColumn(format="$%d", width="medium"),
+        "ret_1d": st.column_config.NumberColumn(format="%.2f%%", width="small"),
+        "ret_1w": st.column_config.NumberColumn(format="%.2f%%", width="small"),
+        "ret_1m": st.column_config.NumberColumn(format="%.2f%%", width="small"),
+        "pnl_1m": st.column_config.NumberColumn(format="$%d", width="medium"),
+    },
+    use_container_width=False,
+)
 
 # =================================================
 # SECTION 3 — STRUCTURAL PROFILE
@@ -211,16 +255,18 @@ order by pnl_sharpe_proxy
 
 profile_df = run_query(profile_query)
 
-st.dataframe(profile_df, use_container_width=True)
-
-negatives = profile_df[profile_df["pnl_sharpe_proxy"] < 0]["ticker"].tolist()
-positives = profile_df[profile_df["pnl_sharpe_proxy"] > 1]["ticker"].tolist()
-
-st.markdown("### 🔻 Structurally Negative Earnings Convexity")
-st.write(", ".join(negatives) if negatives else "None")
-
-st.markdown("### 🔺 Structurally Positive Earnings Convexity")
-st.write(", ".join(positives) if positives else "None")
+st.dataframe(
+    profile_df,
+    height=400,
+    column_config={
+        "ticker": st.column_config.TextColumn(width="small"),
+        "avg_event_pnl": st.column_config.NumberColumn(format="$%d", width="medium"),
+        "pnl_vol": st.column_config.NumberColumn(format="$%d", width="medium"),
+        "pnl_sharpe_proxy": st.column_config.NumberColumn(format="%.2f", width="small"),
+        "events": st.column_config.NumberColumn(width="small"),
+    },
+    use_container_width=False,
+)
 
 # =================================================
 # CURRENT QUARTER
@@ -242,7 +288,15 @@ order by e.earnings_date desc
 
 current_df = run_query(current_query)
 
-st.dataframe(current_df, use_container_width=True)
+st.dataframe(
+    current_df,
+    height=300,
+    column_config={
+        "ticker": st.column_config.TextColumn(width="small"),
+        "earnings_date": st.column_config.DateColumn(width="small"),
+    },
+    use_container_width=False,
+)
 
 # =================================================
 # STRATEGIC MESSAGE
