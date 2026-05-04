@@ -37,14 +37,9 @@ if not check_password():
 # PAGE CONFIG
 # =================================================
 
-st.set_page_config(
-    page_title="Earnings Risk Dashboard",
-    layout="wide"
-)
-
+st.set_page_config(page_title="Earnings Risk Dashboard", layout="wide")
 st.title("📊 Earnings Risk Management Dashboard")
 
-# Reduce dataframe font size
 st.markdown("""
 <style>
 div[data-testid="stDataFrame"] {
@@ -54,7 +49,7 @@ div[data-testid="stDataFrame"] {
 """, unsafe_allow_html=True)
 
 # =================================================
-# DATABASE CONNECTION
+# DB CONNECTION
 # =================================================
 
 @st.cache_data(ttl=300)
@@ -65,36 +60,32 @@ def run_query(query):
     return df
 
 # =================================================
-# TABLE FORMATTER
+# FORMATTER
 # =================================================
 
 def format_event_table(df):
-
     if df.empty:
         return df
 
-    for col in ["ret_1d", "ret_1w", "ret_1m"]:
+    for col in ["ret_1d","ret_1w","ret_1m","ret_3m"]:
         if col in df.columns:
             df[col] = (df[col] * 100).round(2)
 
-    if "pnl_1m" in df.columns:
-        df["pnl_1m"] = df["pnl_1m"].round(0)
-
-    if "position_value" in df.columns:
-        df["position_value"] = df["position_value"].round(0)
+    for col in ["pnl_1m","pnl_3m","position_value"]:
+        if col in df.columns:
+            df[col] = df[col].round(0)
 
     return df
 
-
 # =================================================
-# DEFINE LAST QUARTER
+# QUARTER
 # =================================================
 
 last_quarter_start = "2026-01-01"
 last_quarter_end   = "2026-03-31"
 
 # =================================================
-# CORE EVENT ENGINE
+# CORE EVENT ENGINE (NOW WITH 3M)
 # =================================================
 
 base_event_cte = """
@@ -145,7 +136,13 @@ event_prices as (
          where instrument_id = ev.instrument_id
            and trade_date > ev.anchor_date
          order by trade_date
-         offset 20 limit 1) as px_1m
+         offset 20 limit 1) as px_1m,
+
+        (select close_price from encoredb.equity_daily_prices
+         where instrument_id = ev.instrument_id
+           and trade_date > ev.anchor_date
+         order by trade_date
+         offset 62 limit 1) as px_3m
 
     from earnings_events ev
     join encoredb.equity_daily_prices p0
@@ -163,34 +160,25 @@ st.header("Executive Summary – Last Quarter")
 summary_query = base_event_cte + f"""
 select
     sum(pos.fair_value * (ep.px_1m / ep.px_t - 1)) as total_pnl,
-    stddev(pos.fair_value * (ep.px_1m / ep.px_t - 1)) * sqrt(count(*)) as quarter_volatility_estimate,
+    sum(pos.fair_value * (ep.px_3m / ep.px_t - 1)) as total_pnl_3m,
     count(*) as number_of_events
 from event_prices ep
 join encoredb.portfoliohistory pos
     on pos.ticker = ep.ticker
    and pos.date = ep.anchor_date
 where ep.earnings_date between '{last_quarter_start}' and '{last_quarter_end}'
-  and ep.px_1m is not null
 """
 
 summary = run_query(summary_query)
 
-if not summary.empty and summary["number_of_events"].iloc[0] > 0:
-    total_pnl = summary["total_pnl"].iloc[0]
-    vol_est = summary["quarter_volatility_estimate"].iloc[0]
-    events = summary["number_of_events"].iloc[0]
-
-    signal_ratio = total_pnl / vol_est if vol_est and vol_est != 0 else 0
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    col1.metric("Total Earnings P&L (1m)", f"${total_pnl:,.0f}")
-    col2.metric("Earnings Volatility Est.", f"${vol_est:,.0f}")
-    col3.metric("Signal / Noise", f"{signal_ratio:.2f}")
-    col4.metric("Number of Events", int(events))
+if not summary.empty:
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Earnings P&L (1m)", f"${summary['total_pnl'][0]:,.0f}")
+    col2.metric("Total Earnings P&L (3m)", f"${summary['total_pnl_3m'][0]:,.0f}")
+    col3.metric("Number of Events", int(summary['number_of_events'][0]))
 
 # =================================================
-# SECTION 2 — EVENT DETAIL
+# SECTION 2 — EVENT DETAIL (NOW WITH 3M)
 # =================================================
 
 st.header("Last Quarter Earnings Events")
@@ -203,7 +191,9 @@ select
     (ep.px_1d / ep.px_t - 1) as ret_1d,
     (ep.px_1w / ep.px_t - 1) as ret_1w,
     (ep.px_1m / ep.px_t - 1) as ret_1m,
-    pos.fair_value * (ep.px_1m / ep.px_t - 1) as pnl_1m
+    (ep.px_3m / ep.px_t - 1) as ret_3m,
+    pos.fair_value * (ep.px_1m / ep.px_t - 1) as pnl_1m,
+    pos.fair_value * (ep.px_3m / ep.px_t - 1) as pnl_3m
 from event_prices ep
 join encoredb.portfoliohistory pos
     on pos.ticker = ep.ticker
@@ -213,90 +203,44 @@ order by pnl_1m desc
 """
 
 events_df = format_event_table(run_query(events_query))
+st.dataframe(events_df, height=500, use_container_width=False)
 
-st.dataframe(
-    events_df,
-    height=500,
-    column_config={
-        "ticker": st.column_config.TextColumn(width="small"),
-        "earnings_date": st.column_config.DateColumn(width="small"),
-        "position_value": st.column_config.NumberColumn(format="$%d", width="medium"),
-        "ret_1d": st.column_config.NumberColumn(format="%.2f%%", width="small"),
-        "ret_1w": st.column_config.NumberColumn(format="%.2f%%", width="small"),
-        "ret_1m": st.column_config.NumberColumn(format="%.2f%%", width="small"),
-        "pnl_1m": st.column_config.NumberColumn(format="$%d", width="medium"),
-    },
-    use_container_width=False,
+# =================================================
+# SECTION 3 — FORWARD-LOOKING EARNINGS RISK
+# =================================================
+
+st.header("Upcoming Earnings Risk Exposure (Next 30 Days)")
+
+upcoming_query = """
+with upcoming as (
+    select
+        i.ticker,
+        e.earnings_date,
+        pos.fair_value
+    from encoredb.historical_earnings e
+    join encoredb.instruments i
+        on e.instrument_id = i.instrument_id
+    join encoredb.portfoliohistory pos
+        on pos.ticker = i.ticker
+       and pos.date = current_date
+    where e.earnings_date between current_date
+          and current_date + interval '30 days'
 )
 
-# =================================================
-# SECTION 3 — STRUCTURAL PROFILE
-# =================================================
-
-st.header("Structural Earnings Profile (Trailing History)")
-
-profile_query = base_event_cte + """
 select
-    ep.ticker,
-    avg(pos.fair_value * (ep.px_1m / ep.px_t - 1)) as avg_event_pnl,
-    stddev(pos.fair_value * (ep.px_1m / ep.px_t - 1)) as pnl_vol,
-    avg(pos.fair_value * (ep.px_1m / ep.px_t - 1)) /
-        nullif(stddev(pos.fair_value * (ep.px_1m / ep.px_t - 1)),0) as pnl_sharpe_proxy,
-    count(*) as events
-from event_prices ep
-join encoredb.portfoliohistory pos
-    on pos.ticker = ep.ticker
-   and pos.date = ep.anchor_date
-where ep.px_1m is not null
-group by ep.ticker
-having count(*) >= 2
-order by pnl_sharpe_proxy
+    ticker,
+    earnings_date,
+    fair_value as position_value
+from upcoming
+order by earnings_date
 """
 
-profile_df = run_query(profile_query)
+upcoming_df = run_query(upcoming_query)
 
-st.dataframe(
-    profile_df,
-    height=400,
-    column_config={
-        "ticker": st.column_config.TextColumn(width="small"),
-        "avg_event_pnl": st.column_config.NumberColumn(format="$%d", width="medium"),
-        "pnl_vol": st.column_config.NumberColumn(format="$%d", width="medium"),
-        "pnl_sharpe_proxy": st.column_config.NumberColumn(format="%.2f", width="small"),
-        "events": st.column_config.NumberColumn(width="small"),
-    },
-    use_container_width=False,
-)
+if not upcoming_df.empty:
+    upcoming_df["position_value"] = upcoming_df["position_value"].round(0)
 
-# =================================================
-# CURRENT QUARTER
-# =================================================
-
-st.header("Current Quarter – Reported Earnings")
-
-current_query = """
-select
-    i.ticker,
-    e.earnings_date
-from encoredb.historical_earnings e
-join encoredb.instruments i
-    on e.instrument_id = i.instrument_id
-where date_trunc('quarter', e.earnings_date) =
-      date_trunc('quarter', current_date)
-order by e.earnings_date desc
-"""
-
-current_df = run_query(current_query)
-
-st.dataframe(
-    current_df,
-    height=300,
-    column_config={
-        "ticker": st.column_config.TextColumn(width="small"),
-        "earnings_date": st.column_config.DateColumn(width="small"),
-    },
-    use_container_width=False,
-)
+st.dataframe(upcoming_df, height=300, use_container_width=False)
 
 # =================================================
 # STRATEGIC MESSAGE
@@ -306,9 +250,9 @@ st.markdown("---")
 st.markdown("## Strategic Takeaways")
 
 st.markdown("""
-- Earnings exposure is a material driver of portfolio volatility.
-- Risk-adjusted compensation varies significantly by name.
-- Structural convexity differs meaningfully across tickers.
-- Anchor-adjusted, trading-day-based analysis improves precision.
-- Proactive sizing adjustments into earnings may materially improve Sharpe.
+- Added 3-month forward return horizon.
+- Dashboard now measures longer-term post-earnings convexity.
+- Forward-looking section quantifies current earnings exposure.
+- This enables proactive position sizing before earnings.
+- Structural negative convexity names can now be identified pre-event.
 """)
