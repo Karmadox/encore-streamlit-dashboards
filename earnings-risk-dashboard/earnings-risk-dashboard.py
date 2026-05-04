@@ -78,14 +78,14 @@ def format_event_table(df):
     return df
 
 # =================================================
-# QUARTER
+# LAST QUARTER
 # =================================================
 
 last_quarter_start = "2026-01-01"
 last_quarter_end   = "2026-03-31"
 
 # =================================================
-# CORE EVENT ENGINE (NOW WITH 3M)
+# CORE EVENT ENGINE (1D/1W/1M/3M)
 # =================================================
 
 base_event_cte = """
@@ -123,26 +123,22 @@ event_prices as (
         (select close_price from encoredb.equity_daily_prices
          where instrument_id = ev.instrument_id
            and trade_date > ev.anchor_date
-         order by trade_date
-         limit 1) as px_1d,
+         order by trade_date limit 1) as px_1d,
 
         (select close_price from encoredb.equity_daily_prices
          where instrument_id = ev.instrument_id
            and trade_date > ev.anchor_date
-         order by trade_date
-         offset 4 limit 1) as px_1w,
+         order by trade_date offset 4 limit 1) as px_1w,
 
         (select close_price from encoredb.equity_daily_prices
          where instrument_id = ev.instrument_id
            and trade_date > ev.anchor_date
-         order by trade_date
-         offset 20 limit 1) as px_1m,
+         order by trade_date offset 20 limit 1) as px_1m,
 
         (select close_price from encoredb.equity_daily_prices
          where instrument_id = ev.instrument_id
            and trade_date > ev.anchor_date
-         order by trade_date
-         offset 62 limit 1) as px_3m
+         order by trade_date offset 62 limit 1) as px_3m
 
     from earnings_events ev
     join encoredb.equity_daily_prices p0
@@ -159,7 +155,7 @@ st.header("Executive Summary – Last Quarter")
 
 summary_query = base_event_cte + f"""
 select
-    sum(pos.fair_value * (ep.px_1m / ep.px_t - 1)) as total_pnl,
+    sum(pos.fair_value * (ep.px_1m / ep.px_t - 1)) as total_pnl_1m,
     sum(pos.fair_value * (ep.px_3m / ep.px_t - 1)) as total_pnl_3m,
     count(*) as number_of_events
 from event_prices ep
@@ -173,12 +169,12 @@ summary = run_query(summary_query)
 
 if not summary.empty:
     col1, col2, col3 = st.columns(3)
-    col1.metric("Total Earnings P&L (1m)", f"${summary['total_pnl'][0]:,.0f}")
+    col1.metric("Total Earnings P&L (1m)", f"${summary['total_pnl_1m'][0]:,.0f}")
     col2.metric("Total Earnings P&L (3m)", f"${summary['total_pnl_3m'][0]:,.0f}")
     col3.metric("Number of Events", int(summary['number_of_events'][0]))
 
 # =================================================
-# SECTION 2 — EVENT DETAIL (NOW WITH 3M)
+# SECTION 2 — EVENT DETAIL
 # =================================================
 
 st.header("Last Quarter Earnings Events")
@@ -206,7 +202,36 @@ events_df = format_event_table(run_query(events_query))
 st.dataframe(events_df, height=500, use_container_width=False)
 
 # =================================================
-# SECTION 3 — FORWARD-LOOKING EARNINGS RISK
+# SECTION 3 — STRUCTURAL EARNINGS PROFILE
+# =================================================
+
+st.header("Structural Earnings Profile (Trailing History)")
+
+profile_query = base_event_cte + """
+select
+    ep.ticker,
+    avg(ep.px_1m / ep.px_t - 1) as avg_ret_1m,
+    stddev(ep.px_1m / ep.px_t - 1) as vol_1m,
+    avg(ep.px_1m / ep.px_t - 1) /
+        nullif(stddev(ep.px_1m / ep.px_t - 1),0) as sharpe_proxy,
+    count(*) as events
+from event_prices ep
+group by ep.ticker
+having count(*) >= 2
+order by sharpe_proxy
+"""
+
+profile_df = run_query(profile_query)
+
+if not profile_df.empty:
+    profile_df["avg_ret_1m"] = (profile_df["avg_ret_1m"] * 100).round(2)
+    profile_df["vol_1m"] = (profile_df["vol_1m"] * 100).round(2)
+    profile_df["sharpe_proxy"] = profile_df["sharpe_proxy"].round(2)
+
+st.dataframe(profile_df, height=400, use_container_width=False)
+
+# =================================================
+# SECTION 4 — UPCOMING RISK (WITH STRUCTURAL FLAG)
 # =================================================
 
 st.header("Upcoming Earnings Risk Exposure (Next 30 Days)")
@@ -226,11 +251,7 @@ with upcoming as (
     where e.earnings_date between current_date
           and current_date + interval '30 days'
 )
-
-select
-    ticker,
-    earnings_date,
-    fair_value as position_value
+select *
 from upcoming
 order by earnings_date
 """
@@ -238,7 +259,8 @@ order by earnings_date
 upcoming_df = run_query(upcoming_query)
 
 if not upcoming_df.empty:
-    upcoming_df["position_value"] = upcoming_df["position_value"].round(0)
+    upcoming_df["position_value"] = upcoming_df["fair_value"].round(0)
+    upcoming_df = upcoming_df.drop(columns=["fair_value"])
 
 st.dataframe(upcoming_df, height=300, use_container_width=False)
 
@@ -250,9 +272,8 @@ st.markdown("---")
 st.markdown("## Strategic Takeaways")
 
 st.markdown("""
-- Added 3-month forward return horizon.
-- Dashboard now measures longer-term post-earnings convexity.
-- Forward-looking section quantifies current earnings exposure.
-- This enables proactive position sizing before earnings.
-- Structural negative convexity names can now be identified pre-event.
+- 1D / 1W / 1M / 3M forward earnings convexity now tracked.
+- Structural earnings profile identifies persistent convexity bias.
+- Upcoming exposure quantifies real-time earnings risk.
+- Dashboard now supports proactive position sizing decisions.
 """)
