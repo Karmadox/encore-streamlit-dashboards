@@ -256,7 +256,10 @@ with upcoming as (
         on e.instrument_id = i.instrument_id
     join encoredb.portfoliohistory pos
         on pos.ticker = i.ticker
-       and pos.date = current_date
+      and pos.date = (
+        select max(date)
+        from encoredb.portfoliohistory
+        )
     where e.earnings_date between current_date
           and current_date + interval '30 days'
 )
