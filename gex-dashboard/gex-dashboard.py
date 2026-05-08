@@ -164,7 +164,6 @@ def _gex_table(df, show_event_date=False):
     if df.empty:
         return df
 
-    # 🔥 SORT BY ABS GEX
     if "gex" in df.columns:
         df = df.sort_values("gex", key=lambda x: x.abs(), ascending=False)
 
@@ -247,7 +246,6 @@ sel_date = st.selectbox(
     index=(upcoming + past).index(default_date),
 )
 
-# 🔥 TOGGLE
 show_all = st.toggle("Show names without GEX", value=False)
 
 names = load_names_for_date(sel_date)
@@ -267,18 +265,17 @@ else:
     coverage = (n_with_gex / len(names)) if len(names) > 0 else 0
 
     c1.metric("Names reporting", len(names))
-    c2.metric("With GEX", f"{n_with_gex}/{len(names)}", delta=f"{coverage:.0%} coverage")
+    c2.metric("With GEX", f"{n_with_gex}/{len(names)}", delta=f"{coverage:.0%}")
 
     if n_with_gex > 0:
         agg = merged["gex"].sum()
         regime = "Long Gamma" if agg > 0 else "Short Gamma"
-
         c3.metric("Aggregate GEX", _gex_dollar_M(agg), delta=regime)
 
     st.dataframe(_format_table(_gex_table(merged)), use_container_width=True)
 
 # -------------------------------------------------
-# SECTION 2
+# SECTION 2 (FIXED)
 # -------------------------------------------------
 
 st.markdown("## 📅 Upcoming Earnings — GEX Reads")
@@ -292,8 +289,9 @@ for d in upcoming[:7]:
 
 df_up = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
 
-if not show_all:
-    df_up = df_up[df_up["gex"].notna()]
+if not df_up.empty and "gex" in df_up.columns:
+    if not show_all:
+        df_up = df_up[df_up["gex"].notna()]
 
 st.dataframe(
     _format_table(_gex_table(df_up, show_event_date=True)),
@@ -301,7 +299,7 @@ st.dataframe(
 )
 
 # -------------------------------------------------
-# SECTION 3
+# SECTION 3 (FIXED)
 # -------------------------------------------------
 
 st.markdown("## 📉 Recent Earnings — GEX Reads")
@@ -315,8 +313,10 @@ for d in past[:7]:
 
 df_rec = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
 
-if not show_all:
-    df_rec = df_rec[df_rec["gex"].notna()]
+# 🔥 FIXED SAFETY CHECK
+if not df_rec.empty and "gex" in df_rec.columns:
+    if not show_all:
+        df_rec = df_rec[df_rec["gex"].notna()]
 
 st.dataframe(
     _format_table(_gex_table(df_rec, show_event_date=True)),
