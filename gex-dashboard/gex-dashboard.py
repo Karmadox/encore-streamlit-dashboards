@@ -230,10 +230,13 @@ if panel.empty:
 today = date.today()
 
 upcoming = sorted([d for d in event_dates if pd.to_datetime(d).date() >= today])
+cutoff = pd.to_datetime(today) - pd.Timedelta(days=30)
+
 past = sorted(
-    panel[panel["earnings_date"] < today]["earnings_date"]
-    .dropna()
-    .unique(),
+    panel[
+        (panel["earnings_date"] < today) &
+        (panel["earnings_date"] >= cutoff.date())
+    ]["earnings_date"].unique(),
     reverse=True
 )
 
