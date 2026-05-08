@@ -43,14 +43,19 @@ st.set_page_config(
     layout="wide",
 )
 
-DB_CONFIG = st.secrets["db"]
-
 # -------------------------------------------------
-# DB
+# DB CONNECTION (🔥 FIXED)
 # -------------------------------------------------
 
 def get_conn():
-    return psycopg2.connect(**DB_CONFIG)
+    return psycopg2.connect(
+        dbname=st.secrets["db"]["database"],
+        user=st.secrets["db"]["user"],
+        password=st.secrets["db"]["password"],
+        host=st.secrets["db"]["host"],
+        port=st.secrets["db"]["port"],
+        sslmode="require"   # 🔥 REQUIRED FOR SUPABASE
+    )
 
 # -------------------------------------------------
 # DATA LOADERS
@@ -58,50 +63,66 @@ def get_conn():
 
 @st.cache_data(ttl=60)
 def load_panel():
-    with get_conn() as conn:
-        df = pd.read_sql("SELECT * FROM research.gex_panel", conn)
+    try:
+        with get_conn() as conn:
+            df = pd.read_sql("SELECT * FROM research.gex_panel", conn)
 
-    if df.empty:
+        if df.empty:
+            st.warning("⚠ gex_panel is empty")
+            return df
+
+        df["earnings_date"] = pd.to_datetime(df["earnings_date"]).dt.date
+        df["asof_date"] = pd.to_datetime(df["asof_date"]).dt.date
+
         return df
 
-    df["earnings_date"] = pd.to_datetime(df["earnings_date"]).dt.date
-    df["asof_date"] = pd.to_datetime(df["asof_date"]).dt.date
-    return df
+    except Exception as e:
+        st.error(f"🚨 DB ERROR (load_panel): {e}")
+        return pd.DataFrame()
 
 
 @st.cache_data(ttl=60)
 def list_event_dates():
-    with get_conn() as conn:
-        df = pd.read_sql("""
-            SELECT DISTINCT earnings_date
-            FROM encoredb.portfolio_earnings
-            WHERE earnings_date IS NOT NULL
-            ORDER BY earnings_date
-        """, conn)
+    try:
+        with get_conn() as conn:
+            df = pd.read_sql("""
+                SELECT DISTINCT earnings_date
+                FROM encoredb.portfolio_earnings
+                WHERE earnings_date IS NOT NULL
+                ORDER BY earnings_date
+            """, conn)
 
-    return df["earnings_date"].astype(str).tolist()
+        return df["earnings_date"].astype(str).tolist()
+
+    except Exception as e:
+        st.error(f"🚨 DB ERROR (event_dates): {e}")
+        return []
 
 
 @st.cache_data(ttl=60)
 def load_names_for_date(date_str):
+    try:
+        with get_conn() as conn:
+            df = pd.read_sql("""
+                SELECT
+                    p.ticker,
+                    p.earnings_date,
+                    i.name AS description
+                FROM encoredb.portfolio_earnings p
+                JOIN encoredb.instruments i
+                  ON p.instrument_id = i.instrument_id
+                WHERE p.earnings_date = %s
+                AND p.as_of_date = (
+                    SELECT MAX(as_of_date)
+                    FROM encoredb.portfolio_earnings
+                )
+            """, conn, params=(date_str,))
 
-    with get_conn() as conn:
-        df = pd.read_sql(f"""
-            SELECT
-                p.ticker,
-                p.earnings_date,
-                i.name AS description
-            FROM encoredb.portfolio_earnings p
-            JOIN encoredb.instruments i
-              ON p.instrument_id = i.instrument_id
-            WHERE p.earnings_date = '{date_str}'
-            AND p.as_of_date = (
-                SELECT MAX(as_of_date)
-                FROM encoredb.portfolio_earnings
-            )
-        """, conn)
+        return df
 
-    return df
+    except Exception as e:
+        st.error(f"🚨 DB ERROR (names): {e}")
+        return pd.DataFrame()
 
 
 # -------------------------------------------------
@@ -155,7 +176,7 @@ def _gex_table(df, show_event_date=False):
     out = df[cols].copy()
     out["dealer γ"] = out["gex"].apply(_dealer_pos)
 
-    out = out.rename(columns={
+    return out.rename(columns={
         "earnings_date": "Earnings",
         "ticker": "Ticker",
         "description": "Name",
@@ -166,8 +187,6 @@ def _gex_table(df, show_event_date=False):
         "n_strikes": "Strikes",
         "n_expiries": "Expiries",
     })
-
-    return out
 
 
 def _format_table(df):
