@@ -230,7 +230,12 @@ if panel.empty:
 today = date.today()
 
 upcoming = sorted([d for d in event_dates if pd.to_datetime(d).date() >= today])
-past = sorted([d for d in event_dates if pd.to_datetime(d).date() < today], reverse=True)
+past = sorted(
+    panel[panel["earnings_date"] < today]["earnings_date"]
+    .dropna()
+    .unique(),
+    reverse=True
+)
 
 with st.expander("📘 How to read this dashboard", expanded=False):
 
