@@ -44,7 +44,7 @@ st.set_page_config(
 )
 
 # -------------------------------------------------
-# DB CONNECTION (🔥 FIXED)
+# DB CONNECTION
 # -------------------------------------------------
 
 def get_conn():
@@ -54,7 +54,7 @@ def get_conn():
         password=st.secrets["db"]["password"],
         host=st.secrets["db"]["host"],
         port=st.secrets["db"]["port"],
-        sslmode="require"   # 🔥 REQUIRED FOR SUPABASE
+        sslmode="require"
     )
 
 # -------------------------------------------------
@@ -68,7 +68,6 @@ def load_panel():
             df = pd.read_sql("SELECT * FROM research.gex_panel", conn)
 
         if df.empty:
-            st.warning("⚠ gex_panel is empty")
             return df
 
         df["earnings_date"] = pd.to_datetime(df["earnings_date"]).dt.date
@@ -124,7 +123,6 @@ def load_names_for_date(date_str):
         st.error(f"🚨 DB ERROR (names): {e}")
         return pd.DataFrame()
 
-
 # -------------------------------------------------
 # HELPERS
 # -------------------------------------------------
@@ -145,7 +143,8 @@ def _enrich_with_panel(names, panel, date_str):
     if names.empty:
         return names
 
-    sub = panel[panel["earnings_date"].astype(str) == date_str]
+    date_obj = pd.to_datetime(date_str).date()
+    sub = panel[panel["earnings_date"] == date_obj]
 
     if sub.empty:
         out = names.copy()
@@ -165,8 +164,11 @@ def _gex_table(df, show_event_date=False):
     if df.empty:
         return df
 
-    cols = []
+    # 🔥 SORT BY ABS GEX
+    if "gex" in df.columns:
+        df = df.sort_values("gex", key=lambda x: x.abs(), ascending=False)
 
+    cols = []
     if show_event_date:
         cols.append("earnings_date")
 
@@ -209,7 +211,6 @@ def _format_table(df):
 
     return df.style.format(fmt)
 
-
 # -------------------------------------------------
 # MAIN DASHBOARD
 # -------------------------------------------------
@@ -246,21 +247,33 @@ sel_date = st.selectbox(
     index=(upcoming + past).index(default_date),
 )
 
+# 🔥 TOGGLE
+show_all = st.toggle("Show names without GEX", value=False)
+
 names = load_names_for_date(sel_date)
 merged = _enrich_with_panel(names, panel, sel_date)
 
 if names.empty:
     st.info(f"No names for {sel_date}")
 else:
-    c1, c2, c3 = st.columns(3)
 
     n_with_gex = merged["gex"].notna().sum()
 
-    c1.metric("Names reporting", len(merged))
-    c2.metric("With GEX", f"{n_with_gex}/{len(merged)}")
+    if not show_all:
+        merged = merged[merged["gex"].notna()]
+
+    c1, c2, c3 = st.columns(3)
+
+    coverage = (n_with_gex / len(names)) if len(names) > 0 else 0
+
+    c1.metric("Names reporting", len(names))
+    c2.metric("With GEX", f"{n_with_gex}/{len(names)}", delta=f"{coverage:.0%} coverage")
 
     if n_with_gex > 0:
-        c3.metric("Aggregate GEX", _gex_dollar_M(merged["gex"].sum()))
+        agg = merged["gex"].sum()
+        regime = "Long Gamma" if agg > 0 else "Short Gamma"
+
+        c3.metric("Aggregate GEX", _gex_dollar_M(agg), delta=regime)
 
     st.dataframe(_format_table(_gex_table(merged)), use_container_width=True)
 
@@ -278,6 +291,9 @@ for d in upcoming[:7]:
         rows.append(_enrich_with_panel(n.assign(earnings_date=d), panel, d))
 
 df_up = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
+
+if not show_all:
+    df_up = df_up[df_up["gex"].notna()]
 
 st.dataframe(
     _format_table(_gex_table(df_up, show_event_date=True)),
@@ -298,6 +314,9 @@ for d in past[:7]:
         rows.append(_enrich_with_panel(n.assign(earnings_date=d), panel, d))
 
 df_rec = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
+
+if not show_all:
+    df_rec = df_rec[df_rec["gex"].notna()]
 
 st.dataframe(
     _format_table(_gex_table(df_rec, show_event_date=True)),
