@@ -400,33 +400,39 @@ if not df_up.empty and "gex" in df_up.columns:
 st.dataframe(_format_table(_gex_table(df_up, show_event_date=True)), use_container_width=True)
 
 # -------------------------------------------------
-# SECTION 3 (🔥 FIXED PROPERLY)
+# SECTION 3 — Recent Earnings (🔥 FIXED PROPERLY)
 # -------------------------------------------------
 
 st.markdown("## 📉 Recent Earnings — GEX Reads")
 
-rows = []
-
-for d in past[:7]:
-    n = load_names_for_date(d)
-    if not n.empty:
-        rows.append(_enrich_with_panel(n.assign(earnings_date=d), panel, d))
-
-df_rec = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
+# 🔥 Use panel directly (NOT portfolio_earnings)
+df_rec = panel[panel["earnings_date"] < today].copy()
 
 if df_rec.empty:
     st.info("No recent earnings data available.")
 else:
-    if "gex" in df_rec.columns:
-        # 🔥 ONLY FILTER IF SOME DATA EXISTS
-        if not show_all and df_rec["gex"].notna().any():
-            df_rec = df_rec[df_rec["gex"].notna()]
+
+    # Optional: restrict to last 30 days (recommended)
+    cutoff = pd.to_datetime(today) - pd.Timedelta(days=30)
+    df_rec = df_rec[
+        pd.to_datetime(df_rec["earnings_date"]) >= cutoff
+    ]
+
+    # Optional filter
+    if not show_all and df_rec["gex"].notna().any():
+        df_rec = df_rec[df_rec["gex"].notna()]
+
+    # Sort by most recent date then biggest GEX
+    df_rec = df_rec.sort_values(
+        ["earnings_date", "gex"],
+        ascending=[False, False]
+    )
 
     st.dataframe(
         _format_table(_gex_table(df_rec, show_event_date=True)),
         use_container_width=True
     )
-
+    
 # -------------------------------------------------
 # FOOTER
 # -------------------------------------------------
