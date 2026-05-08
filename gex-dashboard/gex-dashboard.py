@@ -216,6 +216,18 @@ def _format_table(df):
 
 st.title("📊 Dealer Gamma (GEX) Dashboard")
 
+# 🔍 DEBUG: see what user Streamlit is actually using
+with get_conn() as conn:
+    df_user = pd.read_sql("SELECT current_user;", conn)
+
+st.write("DB user:", df_user)
+
+# 🔍 DEBUG: see what user Streamlit is actually using
+with get_conn() as conn:
+    df_user = pd.read_sql("SELECT current_user;", conn)
+
+st.write("DB user:", df_user)
+
 panel = load_panel()
 event_dates = list_event_dates()
 
