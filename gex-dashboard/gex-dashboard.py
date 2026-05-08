@@ -232,6 +232,93 @@ today = date.today()
 upcoming = sorted([d for d in event_dates if pd.to_datetime(d).date() >= today])
 past = sorted([d for d in event_dates if pd.to_datetime(d).date() < today], reverse=True)
 
+with st.expander("📘 How to read this dashboard", expanded=False):
+
+    st.markdown("""
+### 🧠 What is Dealer Gamma (GEX)?
+
+Dealer Gamma measures how options dealers are positioned in a stock.
+
+- **Positive GEX (+)** → Dealers are *long gamma*  
+  → They hedge **against moves** → tends to **dampen volatility**
+
+- **Negative GEX (−)** → Dealers are *short gamma*  
+  → They hedge **with moves** → tends to **amplify volatility**
+
+👉 In simple terms:
+- **+GEX = stabilizing flows**
+- **−GEX = destabilizing flows**
+
+---
+
+### 🎯 Why this matters for earnings
+
+Earnings are major volatility events.
+
+This dashboard helps answer:
+
+> **Will dealer positioning dampen or amplify the post-earnings move?**
+
+---
+
+### 📊 How to interpret the dashboard
+
+#### 1. Selected Day (top section)
+
+- Shows all companies reporting on a chosen earnings date
+- Key signals:
+  - **Dealer γ column** → long / short gamma per name
+  - **Aggregate GEX**:
+    - **Positive** → more stable environment
+    - **Negative** → higher risk of large moves
+
+---
+
+#### 2. Upcoming Earnings
+
+- Forward-looking view (next ~7 earnings dates)
+- Use this to:
+  - Identify **fragile setups (short gamma)**
+  - Size risk ahead of earnings
+
+---
+
+#### 3. Recent Earnings
+
+- Shows **dealer positioning BEFORE earnings**
+- Useful for:
+  - Understanding past moves
+  - Building intuition:
+    - Did **short gamma → big move?**
+    - Did **long gamma → muted reaction?**
+
+---
+
+### ⚠️ Important notes
+
+- GEX is **not a directional signal** (it doesn’t predict up vs down)
+- It is a **volatility / flow signal**
+- Best used alongside:
+  - Positioning
+  - Earnings expectations
+  - Market regime
+
+---
+
+### 🧭 Rule of thumb
+
+- **Large negative GEX → expect bigger moves**
+- **Large positive GEX → expect more contained reactions**
+
+---
+
+### 🏁 Bottom line
+
+This dashboard shows:
+
+> **Where dealer positioning may amplify or suppress volatility around earnings.**
+""")
+    
 # -------------------------------------------------
 # SECTION 1
 # -------------------------------------------------
