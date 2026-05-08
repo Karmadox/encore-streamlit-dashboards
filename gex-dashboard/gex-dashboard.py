@@ -217,7 +217,16 @@ def _format_table(df):
 st.title("📊 Dealer Gamma (GEX) Dashboard")
 
 panel = load_panel()
+
+# 🔍 DEBUG: check what data we actually have
+st.write("DEBUG: panel sample")
+st.write(panel.head(10))
+
+st.write("DEBUG: past earnings in panel")
+st.write(panel[panel["earnings_date"] < date.today()].head(10))
+
 event_dates = list_event_dates()
+
 
 if not event_dates:
     st.warning("No earnings dates found.")
