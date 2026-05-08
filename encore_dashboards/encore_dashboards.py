@@ -380,6 +380,36 @@ with col9:
         """,
         unsafe_allow_html=True,
     )
+
+# -------------------------------------------------
+# ROW 4 — OPTIONS / POSITIONING
+# -------------------------------------------------
+
+col10, col11, col12 = st.columns(3)
+
+with col10:
+    st.markdown(
+        """
+        <div class="dashboard-card">
+            <div class="dashboard-title">📊 Dealer Gamma (GEX) Dashboard</div>
+            <div class="dashboard-subtitle">
+                Per-ticker dealer gamma positioning around earnings events.
+            </div>
+            <ul class="dashboard-list">
+                <li>Pre-earnings dealer positioning (GEX)</li>
+                <li>Call vs put gamma decomposition</li>
+                <li>Upcoming and recent earnings coverage</li>
+                <li>Aggregate gamma regime (long vs short)</li>
+            </ul>
+            <div class="dashboard-link">
+                👉 <a href="https://encore-gex-dashboard.streamlit.app/" target="_blank">
+                    Open GEX Dashboard
+                </a>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     
 # -------------------------------------------------
 # FOOTER
