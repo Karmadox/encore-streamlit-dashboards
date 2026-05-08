@@ -275,7 +275,7 @@ else:
     st.dataframe(_format_table(_gex_table(merged)), use_container_width=True)
 
 # -------------------------------------------------
-# SECTION 2 (FIXED)
+# SECTION 2
 # -------------------------------------------------
 
 st.markdown("## 📅 Upcoming Earnings — GEX Reads")
@@ -293,13 +293,10 @@ if not df_up.empty and "gex" in df_up.columns:
     if not show_all:
         df_up = df_up[df_up["gex"].notna()]
 
-st.dataframe(
-    _format_table(_gex_table(df_up, show_event_date=True)),
-    use_container_width=True
-)
+st.dataframe(_format_table(_gex_table(df_up, show_event_date=True)), use_container_width=True)
 
 # -------------------------------------------------
-# SECTION 3 (FIXED)
+# SECTION 3 (🔥 FIXED PROPERLY)
 # -------------------------------------------------
 
 st.markdown("## 📉 Recent Earnings — GEX Reads")
@@ -313,15 +310,18 @@ for d in past[:7]:
 
 df_rec = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
 
-# 🔥 FIXED SAFETY CHECK
-if not df_rec.empty and "gex" in df_rec.columns:
-    if not show_all:
-        df_rec = df_rec[df_rec["gex"].notna()]
+if df_rec.empty:
+    st.info("No recent earnings data available.")
+else:
+    if "gex" in df_rec.columns:
+        # 🔥 ONLY FILTER IF SOME DATA EXISTS
+        if not show_all and df_rec["gex"].notna().any():
+            df_rec = df_rec[df_rec["gex"].notna()]
 
-st.dataframe(
-    _format_table(_gex_table(df_rec, show_event_date=True)),
-    use_container_width=True
-)
+    st.dataframe(
+        _format_table(_gex_table(df_rec, show_event_date=True)),
+        use_container_width=True
+    )
 
 # -------------------------------------------------
 # FOOTER
