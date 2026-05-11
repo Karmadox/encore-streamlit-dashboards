@@ -465,12 +465,12 @@ with tabs[3]:
             return pd.read_sql(sql, conn)
 
     def classify_intensity(score):
-    if score > 0.85:
-        return "🔴 High concern"
-    elif score > 0.7:
-        return "🟠 Rising concern"
-    else:
-        return "🟢 Normal"
+        if score > 0.85:
+            return "🔴 High concern"
+        elif score > 0.7:
+            return "🟠 Rising concern"
+        else:
+            return "🟢 Normal"
 
     lang = load_language_signals()
     lang["intensity"] = lang["normalized_score"].apply(classify_intensity)
