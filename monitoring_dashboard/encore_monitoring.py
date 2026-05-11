@@ -500,6 +500,33 @@ with tabs[4]:
 
     st.subheader("🧠 Consumer Regime Monitor")
 
+    # -----------------------------
+    # INTERPRETATION GUIDE
+    # -----------------------------
+
+    with st.expander("🧭 How to interpret this dashboard", expanded=False):
+
+        st.markdown("""
+        This dashboard tracks **consumer stress across multiple domains**.
+
+        ---
+        **Signals**
+        - Gasoline → income pressure
+        - XLY/XLP → discretionary vs staples
+        - Rates → financing conditions
+        - VIX → uncertainty
+
+        ---
+        **Framework**
+        signal → persistence → transmission → impact
+
+        ---
+        **Example**
+        Gas ↑ + XLY ↓ →  
+        → consumer stress  
+        → discretionary slowdown  
+        """)
+        
     df = load_latest_signals()
 
     if df.empty:
@@ -593,33 +620,6 @@ with tabs[4]:
     # -----------------------------
 
     st.markdown("### 🧠 Narrative Signals")
-
-    # -----------------------------
-    # INTERPRETATION GUIDE
-    # -----------------------------
-
-    with st.expander("🧭 How to interpret this dashboard", expanded=False):
-
-        st.markdown("""
-        This dashboard tracks **consumer stress across multiple domains**.
-
-        ---
-        **Signals**
-        - Gasoline → income pressure
-        - XLY/XLP → discretionary vs staples
-        - Rates → financing conditions
-        - VIX → uncertainty
-
-        ---
-        **Framework**
-        signal → persistence → transmission → impact
-
-        ---
-        **Example**
-        Gas ↑ + XLY ↓ →  
-        → consumer stress  
-        → discretionary slowdown  
-        """)
     
     @st.cache_data(ttl=300)
     def load_latest_language():
