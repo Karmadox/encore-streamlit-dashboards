@@ -266,7 +266,8 @@ st.title("🛡️ Encore Monitoring")
 tabs = st.tabs([
     "🚨 Instruments Requiring Attention",
     "🏭 Sector → Cohort → Instruments",
-    "🖥 Task Monitoring"
+    "🖥 Task Monitoring",
+    "📡 Signal Alerts"   # NEW
 ])
 
 # --------------------------------------------------
@@ -392,6 +393,31 @@ with tabs[2]:
             """
         )
 
+@st.cache_data(ttl=60)
+def load_signal_alerts():
+    sql = """
+        SELECT date, signal_name, alert_text, severity, created_at
+        FROM encoredb_signals.signal_alerts
+        ORDER BY created_at DESC
+        LIMIT 100
+    """
+    with get_conn() as conn:
+        return pd.read_sql(sql, conn)
+
+
+with tabs[3]:
+
+    st.subheader("📡 Signal Alerts")
+
+    alerts = load_signal_alerts()
+
+    if alerts.empty:
+        st.success("No active alerts.")
+    else:
+        st.warning(f"{len(alerts)} recent alerts")
+
+        st.dataframe(alerts, use_container_width=True)
+        
 # --------------------------------------------------
 # FOOTER
 # --------------------------------------------------
