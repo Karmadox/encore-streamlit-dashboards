@@ -409,66 +409,46 @@ with tabs[3]:
 
     st.subheader("📡 Signal Alerts")
 
-with st.expander("🧭 How to interpret this tab", expanded=False):
+with tabs[3]:
 
-    st.markdown("""
-    This tab highlights **potential stress or regime shifts** in the consumer and macro environment.
-    
-    Alerts are **not trade signals**.  
-    They indicate **where attention may be required**.
-    
-    ---
-    
-    ### **Signal Types**
-    
-    - ⛽ **Gasoline Shock**  
-      Rapid increases in fuel costs → pressure on lower-income consumers
-    
-    - 🛒 **Discretionary Stress (XLY/XLP)**  
-      Weakening discretionary vs staples → consumer trade-down behaviour
-    
-    - 📉 **Rates Pressure**  
-      Rising yields → tightening financial conditions
-    
-    - 📊 **Volatility Regime Shift**  
-      Rising VIX → increasing uncertainty / risk aversion
-    
-    ---
-    
-    ### **Severity**
-    
-    - 🔴 HIGH → Potential regime-relevant shift  
-    - 🟠 MEDIUM → Early warning / developing signal  
-    
-    ---
-    
-    ### **How to Think About It**
-    
-    Use the chain:
-    
-    **signal → persistence → transmission → impact**
-    
-    Avoid:
-    
-    **signal → immediate conclusion**
-    
-    ---
-    
-    ### **Example**
-    
-    Gasoline shock + discretionary weakness →  
-    → low-income consumer stress  
-    → traffic decline in fast food / retail  
-    → earnings risk for exposed cohorts
-    """)
-    
+    st.subheader("📡 Signal Alerts")
+
+    # --- EXPANDER (INTERPRETATION ONLY) ---
+    with st.expander("🧭 How to interpret this tab", expanded=False):
+
+        st.markdown("""
+        This tab highlights **potential stress or regime shifts** in the consumer and macro environment.
+
+        Alerts are **not trade signals**.  
+        They indicate **where attention may be required**.
+
+        ---
+        ### **Signal Types**
+
+        - ⛽ Gasoline Shock  
+        - 🛒 Discretionary Stress  
+        - 📉 Rates Pressure  
+        - 📊 Volatility Regime Shift  
+
+        ---
+        ### **Severity**
+
+        - 🔴 HIGH → regime-relevant  
+        - 🟠 MEDIUM → early signal  
+
+        ---
+        ### **Thinking Framework**
+
+        signal → persistence → transmission → impact
+        """)
+
+    # --- ALERTS (ALWAYS VISIBLE) ---
     alerts = load_signal_alerts()
 
     if alerts.empty:
         st.success("No active alerts.")
     else:
         st.warning(f"{len(alerts)} recent alerts")
-
         st.dataframe(alerts, use_container_width=True)
         
 # --------------------------------------------------
