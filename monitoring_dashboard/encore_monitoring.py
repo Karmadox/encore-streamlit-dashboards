@@ -409,6 +409,59 @@ with tabs[3]:
 
     st.subheader("📡 Signal Alerts")
 
+    st.markdown("""
+    ### 🧭 How to Interpret Signal Alerts
+    
+    This tab highlights **potential stress or regime shifts** in the consumer and macro environment.
+    
+    Alerts are **not trade signals**.  
+    They indicate **where attention may be required**.
+    
+    ---
+    
+    **Signal Types**
+    
+    - ⛽ **Gasoline Shock**  
+      Rapid increases in fuel costs → pressure on lower-income consumers
+    
+    - 🛒 **Discretionary Stress (XLY/XLP)**  
+      Weakening discretionary vs staples → consumer trade-down behaviour
+    
+    - 📉 **Rates Pressure**  
+      Rising yields → tightening financial conditions
+    
+    - 📊 **Volatility Regime Shift**  
+      Rising VIX → increasing uncertainty / risk aversion
+    
+    ---
+    
+    **Severity**
+    
+    - 🔴 HIGH → Potential regime-relevant shift  
+    - 🟠 MEDIUM → Early warning / developing signal  
+    
+    ---
+    
+    **How to Use**
+    
+    Think in terms of:
+    
+    signal → persistence → transmission → impact
+    
+    NOT:
+    
+    signal → immediate conclusion
+    
+    ---
+    
+    **Example**
+    
+    Gasoline shock + discretionary weakness →  
+    → low-income consumer stress  
+    → traffic decline in fast food / retail  
+    → earnings risk for exposed cohorts
+    """)
+    
     alerts = load_signal_alerts()
 
     if alerts.empty:
