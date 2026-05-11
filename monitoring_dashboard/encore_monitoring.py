@@ -445,7 +445,31 @@ with tabs[3]:
     else:
         st.warning(f"{len(alerts)} recent alerts")
         st.dataframe(alerts, use_container_width=True)
-        
+
+    st.subheader("🔍 Language / Search Signals")
+
+    @st.cache_data(ttl=60)
+    def load_language_signals():
+        sql = """
+            SELECT
+                timestamp,
+                keyword,
+                frequency,
+                normalized_score,
+                source
+            FROM encoredb_signals.language_signals
+            ORDER BY timestamp DESC
+            LIMIT 50
+        """
+        with get_conn() as conn:
+            return pd.read_sql(sql, conn)
+    
+    lang = load_language_signals()
+    
+    if lang.empty:
+        st.info("No language signals available.")
+    else:
+        st.dataframe(lang, use_container_width=True)
 # --------------------------------------------------
 # FOOTER
 # --------------------------------------------------
