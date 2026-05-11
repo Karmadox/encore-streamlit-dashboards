@@ -409,9 +409,9 @@ with tabs[3]:
 
     st.subheader("📡 Signal Alerts")
 
+with st.expander("🧭 How to interpret this tab", expanded=False):
+
     st.markdown("""
-    ### 🧭 How to Interpret Signal Alerts
-    
     This tab highlights **potential stress or regime shifts** in the consumer and macro environment.
     
     Alerts are **not trade signals**.  
@@ -419,7 +419,7 @@ with tabs[3]:
     
     ---
     
-    **Signal Types**
+    ### **Signal Types**
     
     - ⛽ **Gasoline Shock**  
       Rapid increases in fuel costs → pressure on lower-income consumers
@@ -435,26 +435,26 @@ with tabs[3]:
     
     ---
     
-    **Severity**
+    ### **Severity**
     
     - 🔴 HIGH → Potential regime-relevant shift  
     - 🟠 MEDIUM → Early warning / developing signal  
     
     ---
     
-    **How to Use**
+    ### **How to Think About It**
     
-    Think in terms of:
+    Use the chain:
     
-    signal → persistence → transmission → impact
+    **signal → persistence → transmission → impact**
     
-    NOT:
+    Avoid:
     
-    signal → immediate conclusion
+    **signal → immediate conclusion**
     
     ---
     
-    **Example**
+    ### **Example**
     
     Gasoline shock + discretionary weakness →  
     → low-income consumer stress  
