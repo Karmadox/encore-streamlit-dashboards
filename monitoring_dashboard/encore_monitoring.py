@@ -594,27 +594,6 @@ with tabs[4]:
 
     st.markdown("### 🧠 Narrative Signals")
 
-    @st.cache_data(ttl=300)
-    def load_latest_language():
-        sql = """
-            SELECT keyword, normalized_score
-            FROM encoredb_signals.language_signals
-            WHERE timestamp = (
-                SELECT MAX(timestamp)
-                FROM encoredb_signals.language_signals
-            )
-        """
-        with get_conn() as conn:
-            return pd.read_sql(sql, conn)
-
-    lang = load_latest_language()
-
-    if lang.empty:
-        st.info("No language signals yet.")
-    else:
-        for _, r in lang.iterrows():
-            st.markdown(f"- {r['keyword']}: {r['normalized_score']:.1f}")
-
     # -----------------------------
     # INTERPRETATION GUIDE
     # -----------------------------
@@ -641,6 +620,28 @@ with tabs[4]:
         → consumer stress  
         → discretionary slowdown  
         """)
+    
+    @st.cache_data(ttl=300)
+    def load_latest_language():
+        sql = """
+            SELECT keyword, normalized_score
+            FROM encoredb_signals.language_signals
+            WHERE timestamp = (
+                SELECT MAX(timestamp)
+                FROM encoredb_signals.language_signals
+            )
+        """
+        with get_conn() as conn:
+            return pd.read_sql(sql, conn)
+
+    lang = load_latest_language()
+
+    if lang.empty:
+        st.info("No language signals yet.")
+    else:
+        for _, r in lang.iterrows():
+            st.markdown(f"- {r['keyword']}: {r['normalized_score']:.1f}")
+
         
 # --------------------------------------------------
 # FOOTER
