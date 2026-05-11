@@ -267,7 +267,8 @@ tabs = st.tabs([
     "🚨 Instruments Requiring Attention",
     "🏭 Sector → Cohort → Instruments",
     "🖥 Task Monitoring",
-    "📡 Signal Alerts"   # NEW
+    "📡 Signal Alerts",
+    "🧠 Consumer Regime Monitor"   # 👈 NEW TAB
 ])
 
 # --------------------------------------------------
@@ -479,6 +480,168 @@ with tabs[3]:
         st.info("No language signals available.")
     else:
         st.dataframe(lang, use_container_width=True)
+
+# --------------------------------------------------
+# TAB 5 – CONSUMER REGIME MONITOR
+# --------------------------------------------------
+
+@st.cache_data(ttl=60)
+def load_latest_signals():
+    sql = """
+        SELECT *
+        FROM encoredb_signals.signal_features
+        ORDER BY date DESC
+        LIMIT 1
+    """
+    with get_conn() as conn:
+        return pd.read_sql(sql, conn)
+
+with tabs[4]:
+
+    st.subheader("🧠 Consumer Regime Monitor")
+
+    df = load_latest_signals()
+
+    if df.empty:
+        st.warning("No signal data available.")
+        st.stop()
+
+    row = df.iloc[0]
+
+    gasoline_5d = row.get("gasoline_5d")
+    xly_xlp_10d = row.get("xly_xlp_10d")
+    rates_2y_10d = row.get("rates_2y_10d")
+    vix_level = row.get("vix_level")
+
+    # -----------------------------
+    # REGIME CLASSIFICATION
+    # -----------------------------
+
+    regime = "⚪ Mixed / Unclear"
+
+    if gasoline_5d is not None and xly_xlp_10d is not None:
+        if gasoline_5d > 0.05 and xly_xlp_10d < -0.02:
+            regime = "🔴 Consumer Stress Rising"
+        elif gasoline_5d < 0 and xly_xlp_10d > 0:
+            regime = "🟢 Consumer Relief"
+        elif gasoline_5d > 0 and xly_xlp_10d < 0:
+            regime = "🟠 Early Stress Signals"
+
+    st.markdown(f"## {regime}")
+
+    st.markdown("---")
+
+    # -----------------------------
+    # METRICS
+    # -----------------------------
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    col1.metric("⛽ Gasoline 5d", f"{gasoline_5d:.2%}" if gasoline_5d else "—")
+    col2.metric("🛒 XLY/XLP (10d)", f"{xly_xlp_10d:.2%}" if xly_xlp_10d else "—")
+    col3.metric("📉 2Y Rates (10d)", f"{rates_2y_10d:.2%}" if rates_2y_10d else "—")
+    col4.metric("📊 VIX Level", f"{vix_level:.2f}" if vix_level else "—")
+
+    st.markdown("---")
+
+    # -----------------------------
+    # COHORT IMPACT
+    # -----------------------------
+
+    impacted = []
+
+    if gasoline_5d is not None and gasoline_5d > 0.05:
+        impacted += [
+            "Fast Food (traffic pressure)",
+            "Discount Retail (basket compression)",
+            "Lower-income consumers"
+        ]
+
+    if xly_xlp_10d is not None and xly_xlp_10d < -0.02:
+        impacted += [
+            "Discretionary Retail",
+            "Apparel / E-commerce",
+            "Casual Dining"
+        ]
+
+    if rates_2y_10d is not None and rates_2y_10d > 0.03:
+        impacted += [
+            "Housing / Durables",
+            "Autos"
+        ]
+
+    if vix_level is not None and vix_level > 20:
+        impacted += [
+            "Broad risk assets",
+            "Consumer confidence"
+        ]
+
+    impacted = list(set(impacted))
+
+    st.markdown("### 📦 Likely Impacted Cohorts")
+
+    if impacted:
+        for i in impacted:
+            st.markdown(f"- {i}")
+    else:
+        st.markdown("No clear cohort stress signals.")
+
+    st.markdown("---")
+
+    # -----------------------------
+    # LANGUAGE SNAPSHOT
+    # -----------------------------
+
+    st.markdown("### 🧠 Narrative Signals")
+
+    @st.cache_data(ttl=300)
+    def load_latest_language():
+        sql = """
+            SELECT keyword, normalized_score
+            FROM encoredb_signals.language_signals
+            WHERE timestamp = (
+                SELECT MAX(timestamp)
+                FROM encoredb_signals.language_signals
+            )
+        """
+        with get_conn() as conn:
+            return pd.read_sql(sql, conn)
+
+    lang = load_latest_language()
+
+    if lang.empty:
+        st.info("No language signals yet.")
+    else:
+        for _, r in lang.iterrows():
+            st.markdown(f"- {r['keyword']}: {r['normalized_score']:.1f}")
+
+    # -----------------------------
+    # INTERPRETATION GUIDE
+    # -----------------------------
+
+    with st.expander("🧭 How to interpret this dashboard", expanded=False):
+
+        st.markdown("""
+        This dashboard tracks **consumer stress across multiple domains**.
+
+        ---
+        **Signals**
+        - Gasoline → income pressure
+        - XLY/XLP → discretionary vs staples
+        - Rates → financing conditions
+        - VIX → uncertainty
+
+        ---
+        **Framework**
+        signal → persistence → transmission → impact
+
+        ---
+        **Example**
+        Gas ↑ + XLY ↓ →  
+        → consumer stress  
+        → discretionary slowdown  
+        """)
+        
 # --------------------------------------------------
 # FOOTER
 # --------------------------------------------------
