@@ -404,11 +404,6 @@ def load_signal_alerts():
     with get_conn() as conn:
         return pd.read_sql(sql, conn)
 
-
-with tabs[3]:
-
-    st.subheader("📡 Signal Alerts")
-
 with tabs[3]:
 
     st.subheader("📡 Signal Alerts")
