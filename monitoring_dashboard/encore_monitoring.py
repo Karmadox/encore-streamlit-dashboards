@@ -583,10 +583,10 @@ with tabs[3]:
 
     st.subheader("🧠 🧠 Current Environment")
 
-        for _, row in alerts.iterrows():
-            narrative.append(
-                f"- {row['alert_text']} → {row['cohort_impact']} → {row['example_names']}"
-            )
+    for _, row in alerts.iterrows():
+        narrative.append(
+            f"- {row['alert_text']} → {row['cohort_impact']} → {row['example_names']}"
+        )
 
     # =========================
     # LANGUAGE SIGNALS
