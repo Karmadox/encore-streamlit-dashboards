@@ -474,13 +474,98 @@ with tabs[3]:
             return "🟢 Normal"
 
     lang = load_language_signals()
-    lang["intensity"] = lang["normalized_score"].apply(classify_intensity)
-    
+
     if lang.empty:
         st.info("No language signals available.")
     else:
-        st.dataframe(lang, use_container_width=True)
 
+        # -----------------------------
+        # PREP
+        # -----------------------------
+    
+        lang["timestamp"] = pd.to_datetime(lang["timestamp"])
+        lang = lang.sort_values("timestamp")
+    
+        # Focus per keyword
+        latest_rows = []
+    
+        for kw in lang["keyword"].unique():
+    
+            df_kw = lang[lang["keyword"] == kw].copy()
+    
+            # rolling stats
+            df_kw["mean_4w"] = df_kw["normalized_score"].rolling(4).mean()
+            df_kw["std_4w"] = df_kw["normalized_score"].rolling(4).std()
+    
+            df_kw["zscore"] = (
+                (df_kw["normalized_score"] - df_kw["mean_4w"]) /
+                df_kw["std_4w"]
+            )
+    
+            df_kw["roc_4w"] = df_kw["normalized_score"].pct_change(4)
+    
+            latest = df_kw.iloc[-1]
+    
+            latest_rows.append({
+                "keyword": kw,
+                "level": latest["normalized_score"],
+                "zscore": latest["zscore"],
+                "roc_4w": latest["roc_4w"]
+            })
+    
+        summary = pd.DataFrame(latest_rows)
+
+    # -----------------------------
+    # CLASSIFICATION (FIXED)
+    # -----------------------------
+
+    def classify(row):
+
+        if row["zscore"] > 2:
+            return "🔴 Spike"
+
+        elif row["zscore"] > 1:
+            return "🟠 Elevated"
+
+        elif row["roc_4w"] > 0.3:
+            return "🟡 Rising"
+
+        else:
+            return "🟢 Normal"
+
+    summary["signal"] = summary.apply(classify, axis=1)
+
+    # -----------------------------
+    # DISPLAY
+    # -----------------------------
+
+    st.dataframe(summary, use_container_width=True)
+
+    # -----------------------------
+    # CLASSIFICATION (FIXED)
+    # -----------------------------
+
+    def classify(row):
+
+        if row["zscore"] > 2:
+            return "🔴 Spike"
+
+        elif row["zscore"] > 1:
+            return "🟠 Elevated"
+
+        elif row["roc_4w"] > 0.3:
+            return "🟡 Rising"
+
+        else:
+            return "🟢 Normal"
+
+    summary["signal"] = summary.apply(classify, axis=1)
+
+    # -----------------------------
+    # DISPLAY
+    # -----------------------------
+
+    st.dataframe(summary, use_container_width=True)
 # --------------------------------------------------
 # TAB 5 – CONSUMER REGIME MONITOR
 # --------------------------------------------------
