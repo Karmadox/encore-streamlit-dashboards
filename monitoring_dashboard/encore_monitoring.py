@@ -547,7 +547,7 @@ with tabs[3]:
             ]["cohort_name"].tolist()
     
             return ", ".join(names) if names else "General market"
-    
+            
         def get_example_tickers(signal_name):
 
             codes = map_cohort_codes(signal_name)
@@ -559,13 +559,14 @@ with tabs[3]:
             if df.empty:
                 return "No mapped instruments"
         
-            # 🔥 THIS IS THE FIX
-            df = df.sort_values("weight_pct", ascending=False)
+            # ✅ remove meaningless weight sorting
+            df = df.drop_duplicates("ticker")
         
             top = df.head(5)
         
+            # ✅ fix percentage display (1.0 = 100%)
             return ", ".join(
-                [f"{r.ticker} ({r.weight_pct:.0f}%)" for _, r in top.iterrows()]
+                [f"{r.ticker} ({r.weight_pct * 100:.0f}%)" for _, r in top.iterrows()]
             )
     
         alerts["cohort_impact"] = alerts["signal_name"].apply(resolve_cohort_names)
