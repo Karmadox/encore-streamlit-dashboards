@@ -556,7 +556,7 @@ with tabs[3]:
                 inst_df["cohort_code"].isin(codes)
             ]["ticker"].unique()
     
-            return ", ".join(tickers[:5])
+            return ", ".join(tickers[:5]) if len(tickers) > 0 else "No mapped instruments"
     
         alerts["cohort_impact"] = alerts["signal_name"].apply(resolve_cohort_names)
         alerts["example_names"] = alerts["signal_name"].apply(get_example_tickers)
