@@ -524,58 +524,63 @@ with tabs[3]:
     # =========================
     # ALERTS
     # =========================
-
+    
     alerts = load_signal_alerts()
-
-    if not alerts.empty:
-        alerts["implication"] = alerts["signal_name"].apply(map_implication)
-
+    
     if alerts.empty:
         st.success("No active alerts.")
+    
     else:
+        # -----------------------------
+        # ADD INTERPRETATION FIELDS FIRST
+        # -----------------------------
+    
+        alerts["implication"] = alerts["signal_name"].apply(map_implication)
+    
+        cohorts_df = load_cohort_lookup()
+        inst_df = load_instruments_by_cohort()
+    
+        def resolve_cohort_names(signal_name):
+            codes = map_cohort_codes(signal_name)
+    
+            names = cohorts_df[
+                cohorts_df["cohort_code"].isin(codes)
+            ]["cohort_name"].tolist()
+    
+            return ", ".join(names) if names else "General market"
+    
+        def get_example_tickers(signal_name):
+            codes = map_cohort_codes(signal_name)
+    
+            tickers = inst_df[
+                inst_df["cohort_code"].isin(codes)
+            ]["ticker"].unique()
+    
+            return ", ".join(tickers[:5])
+    
+        alerts["cohort_impact"] = alerts["signal_name"].apply(resolve_cohort_names)
+        alerts["example_names"] = alerts["signal_name"].apply(get_example_tickers)
+    
+        # -----------------------------
+        # DISPLAY (NOW SAFE)
+        # -----------------------------
+    
         st.warning(f"{len(alerts)} recent alerts")
+    
         st.dataframe(
-        alerts[
-            [
-                "date",
-                "signal_name",
-                "severity",
-                "alert_text",
-                "cohort_impact",
-                "example_names",
-                "created_at"
-            ]
-        ],
-           use_container_width=True
+            alerts[
+                [
+                    "date",
+                    "signal_name",
+                    "severity",
+                    "alert_text",
+                    "cohort_impact",
+                    "example_names",
+                    "created_at"
+                ]
+            ],
+            use_container_width=True
         )
-
-    cohorts_df = load_cohort_lookup()
-
-    def resolve_cohort_names(signal_name):
-    
-        codes = map_cohort_codes(signal_name)
-    
-        names = cohorts_df[
-            cohorts_df["cohort_code"].isin(codes)
-        ]["cohort_name"].tolist()
-    
-        return ", ".join(names) if names else "General market"
-
-    alerts["cohort_impact"] = alerts["signal_name"].apply(resolve_cohort_names)
-
-    inst_df = load_instruments_by_cohort()
-
-    def get_example_tickers(signal_name):
-    
-        codes = map_cohort_codes(signal_name)
-    
-        tickers = inst_df[
-            inst_df["cohort_code"].isin(codes)
-        ]["ticker"].unique()
-    
-        return ", ".join(tickers[:5])  # keep it clean
-
-    alerts["example_names"] = alerts["signal_name"].apply(get_example_tickers)
     
     # =========================
     # NARRATIVE
@@ -583,11 +588,14 @@ with tabs[3]:
 
     st.subheader("🧠 🧠 Current Environment")
 
+    narrative = []
     for _, row in alerts.iterrows():
         narrative.append(
             f"- {row['alert_text']} → {row['cohort_impact']} → {row['example_names']}"
         )
-
+    st.markdown("### Current Read:")
+    st.markdown("\n".join(narrative))
+    
     # =========================
     # LANGUAGE SIGNALS
     # =========================
