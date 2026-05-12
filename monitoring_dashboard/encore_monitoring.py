@@ -446,9 +446,9 @@ with tabs[3]:
     else:
         st.warning(f"{len(alerts)} recent alerts")
         st.dataframe(alerts, use_container_width=True)
-
+        
     st.subheader("🔍 Language / Search Signals")
-
+    
     @st.cache_data(ttl=60)
     def load_language_signals():
         sql = """
@@ -460,40 +460,30 @@ with tabs[3]:
                 source
             FROM encoredb_signals.language_signals
             ORDER BY timestamp DESC
-            LIMIT 50
+            LIMIT 200
         """
         with get_conn() as conn:
             return pd.read_sql(sql, conn)
-
-    def classify_intensity(score):
-        if score > 0.85:
-            return "🔴 High concern"
-        elif score > 0.7:
-            return "🟠 Rising concern"
-        else:
-            return "🟢 Normal"
-
+    
     lang = load_language_signals()
-
+    
     if lang.empty:
         st.info("No language signals available.")
+    
     else:
-
+    
         # -----------------------------
         # PREP
         # -----------------------------
-    
         lang["timestamp"] = pd.to_datetime(lang["timestamp"])
         lang = lang.sort_values("timestamp")
     
-        # Focus per keyword
         latest_rows = []
     
         for kw in lang["keyword"].unique():
     
             df_kw = lang[lang["keyword"] == kw].copy()
     
-            # rolling stats
             df_kw["mean_4w"] = df_kw["normalized_score"].rolling(4).mean()
             df_kw["std_4w"] = df_kw["normalized_score"].rolling(4).std()
     
@@ -514,58 +504,27 @@ with tabs[3]:
             })
     
         summary = pd.DataFrame(latest_rows)
-
-    # -----------------------------
-    # CLASSIFICATION (FIXED)
-    # -----------------------------
-
-    def classify(row):
-
-        if row["zscore"] > 2:
-            return "🔴 Spike"
-
-        elif row["zscore"] > 1:
-            return "🟠 Elevated"
-
-        elif row["roc_4w"] > 0.3:
-            return "🟡 Rising"
-
-        else:
-            return "🟢 Normal"
-
-    summary["signal"] = summary.apply(classify, axis=1)
-
-    # -----------------------------
-    # DISPLAY
-    # -----------------------------
-
-    st.dataframe(summary, use_container_width=True)
-
-    # -----------------------------
-    # CLASSIFICATION (FIXED)
-    # -----------------------------
-
-    def classify(row):
-
-        if row["zscore"] > 2:
-            return "🔴 Spike"
-
-        elif row["zscore"] > 1:
-            return "🟠 Elevated"
-
-        elif row["roc_4w"] > 0.3:
-            return "🟡 Rising"
-
-        else:
-            return "🟢 Normal"
-
-    summary["signal"] = summary.apply(classify, axis=1)
-
-    # -----------------------------
-    # DISPLAY
-    # -----------------------------
-
-    st.dataframe(summary, use_container_width=True)
+    
+        # -----------------------------
+        # CLASSIFICATION
+        # -----------------------------
+        def classify(row):
+            if pd.notnull(row["zscore"]) and row["zscore"] > 2:
+                return "🔴 Spike"
+            elif pd.notnull(row["zscore"]) and row["zscore"] > 1:
+                return "🟠 Elevated"
+            elif pd.notnull(row["roc_4w"]) and row["roc_4w"] > 0.3:
+                return "🟡 Rising"
+            else:
+                return "🟢 Normal"
+    
+        summary["signal"] = summary.apply(classify, axis=1)
+    
+        # -----------------------------
+        # DISPLAY
+        # -----------------------------
+        st.dataframe(summary, use_container_width=True)
+        
 # --------------------------------------------------
 # TAB 5 – CONSUMER REGIME MONITOR
 # --------------------------------------------------
