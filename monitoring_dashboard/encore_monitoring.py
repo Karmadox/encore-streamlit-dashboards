@@ -484,46 +484,46 @@ with tabs[3]:
         return mapping.get(signal_name, "General monitoring signal")
 
     def map_cohort_codes(signal_name):
-
-    # -------------------------
-    # RULE-BASED MATCHING
-    # -------------------------
-
-    if "gasoline" in signal_name:
-        return [
-            "CONS_SERV_REST",
-            "CONS_DISC_BROAD",
-            "CONS_DISC_SPEC"
-        ]
-
-    elif "discretionary" in signal_name:
-        return [
-            "CONS_DISC_BROAD",
-            "CONS_DISC_SPEC",
-            "CONS_DISC_BRAND"
-        ]
-
-    elif "rates" in signal_name:
-        return [
-            "AUTO_MOBILITY",
-            "CAPITAL_GOODS",
-            "BANK_REGIONAL"
-        ]
-
-    elif "vol" in signal_name:
-        return [
-            "EQ_INDEX_BROAD",
-            "VOLATILITY"
-        ]
-
-    elif "recession" in signal_name:
-        return [
-            "CONS_DISC_BROAD",
-            "CONS_DISC_BRAND",
-            "CONS_SERV_TRAVEL"
-        ]
-
-    return []
+    
+        # -------------------------
+        # RULE-BASED MATCHING
+        # -------------------------
+    
+        if "gasoline" in signal_name:
+            return [
+                "CONS_SERV_REST",
+                "CONS_DISC_BROAD",
+                "CONS_DISC_SPEC"
+            ]
+    
+        elif "discretionary" in signal_name:
+            return [
+                "CONS_DISC_BROAD",
+                "CONS_DISC_SPEC",
+                "CONS_DISC_BRAND"
+            ]
+    
+        elif "rates" in signal_name:
+            return [
+                "AUTO_MOBILITY",
+                "CAPITAL_GOODS",
+                "BANK_REGIONAL"
+            ]
+    
+        elif "vol" in signal_name:
+            return [
+                "EQ_INDEX_BROAD",
+                "VOLATILITY"
+            ]
+    
+        elif "recession" in signal_name:
+            return [
+                "CONS_DISC_BROAD",
+                "CONS_DISC_BRAND",
+                "CONS_SERV_TRAVEL"
+            ]
+    
+        return []
         
     # =========================
     # ALERTS
