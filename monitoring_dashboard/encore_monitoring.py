@@ -559,15 +559,11 @@ with tabs[3]:
             if df.empty:
                 return "No mapped instruments"
         
-            # ✅ remove meaningless weight sorting
             df = df.drop_duplicates("ticker")
         
             top = df.head(5)
         
-            # ✅ fix percentage display (1.0 = 100%)
-            return ", ".join(
-                [f"{r.ticker} ({r.weight_pct * 100:.0f}%)" for _, r in top.iterrows()]
-            )
+            return ", ".join(top["ticker"].tolist())
     
         alerts["cohort_impact"] = alerts["signal_name"].apply(resolve_cohort_names)
         alerts["example_names"] = alerts["signal_name"].apply(get_example_tickers)
@@ -601,6 +597,9 @@ with tabs[3]:
 
     narrative = []
     for _, row in alerts.iterrows():
+        if row["cohort_impact"] == "General market":
+        continue  # skip weak signals
+
         narrative.append(
             f"- {row['alert_text']} → {row['cohort_impact']} → {row['example_names']}"
         )
