@@ -85,6 +85,36 @@ def load_cohorts(sector_id):
     with get_conn() as conn:
         return pd.read_sql(sql, conn, params=(sql_param(sector_id),))
 
+@st.cache_data(ttl=300)
+def load_cohort_lookup():
+    sql = """
+        SELECT cohort_code, cohort_name
+        FROM encoredb.cohorts
+    """
+    with get_conn() as conn:
+        return pd.read_sql(sql, conn)
+
+@st.cache_data(ttl=300)
+def load_instruments_by_cohort():
+
+    sql = """
+        SELECT
+            c.cohort_code,
+            i.ticker
+        FROM encoredb.instrument_cohort_weights w
+        JOIN encoredb.instruments i
+            ON i.instrument_id = w.instrument_id
+        JOIN encoredb.cohorts c
+            ON c.cohort_id = w.cohort_id
+        WHERE w.effective_date = (
+            SELECT MAX(effective_date)
+            FROM encoredb.instrument_cohort_weights
+        )
+    """
+
+    with get_conn() as conn:
+        return pd.read_sql(sql, conn)
+
 
 # 🔥 OPTIMIZED + CORRECT PRIMARY LOGIC
 @st.cache_data(ttl=300)
@@ -454,6 +484,43 @@ with tabs[3]:
         }
         return mapping.get(signal_name, "General monitoring signal")
 
+    def map_cohort_codes(signal_name):
+        mapping = {
+            "gasoline_shock": [
+                "CONS_SERV_REST",
+                "CONS_DISC_BROAD",
+                "CONS_DISC_SPEC"
+            ],
+    
+            "discretionary_stress": [
+                "CONS_DISC_BROAD",
+                "CONS_DISC_SPEC",
+                "CONS_DISC_BRAND"
+            ],
+    
+            "rates_spike": [
+                "AUTO_MOBILITY",
+                "CAPITAL_GOODS",
+                "BANK_REGIONAL"
+            ],
+    
+            "vol_regime": [
+                "EQ_INDEX_BROAD",
+                "VOLATILITY"
+            ],
+    
+            "recession_search_spike": [
+                "CONS_DISC_BROAD",
+                "CONS_SERV_TRAVEL"
+            ],
+    
+            "recession_search_decline": [
+                "CONS_DISC_BROAD",
+                "CONS_DISC_BRAND"
+            ]
+        }
+        return mapping.get(signal_name, [])
+        
     # =========================
     # ALERTS
     # =========================
@@ -468,34 +535,58 @@ with tabs[3]:
     else:
         st.warning(f"{len(alerts)} recent alerts")
         st.dataframe(
-            alerts[
-                [
-                    "date",
-                    "signal_name",
-                    "severity",
-                    "alert_text",
-                    "implication",
-                    "created_at"
-                ]
-            ],
-            use_container_width=True
+        alerts[
+            [
+                "date",
+                "signal_name",
+                "severity",
+                "alert_text",
+                "cohort_impact",
+                "example_names",
+                "created_at"
+            ]
+        ],
+           use_container_width=True
         )
 
+    cohorts_df = load_cohort_lookup()
+
+    def resolve_cohort_names(signal_name):
+    
+        codes = map_cohort_codes(signal_name)
+    
+        names = cohorts_df[
+            cohorts_df["cohort_code"].isin(codes)
+        ]["cohort_name"].tolist()
+    
+        return ", ".join(names) if names else "General market"
+
+    alerts["cohort_impact"] = alerts["signal_name"].apply(resolve_cohort_names)
+
+    inst_df = load_instruments_by_cohort()
+
+    def get_example_tickers(signal_name):
+    
+        codes = map_cohort_codes(signal_name)
+    
+        tickers = inst_df[
+            inst_df["cohort_code"].isin(codes)
+        ]["ticker"].unique()
+    
+        return ", ".join(tickers[:5])  # keep it clean
+
+    alerts["example_names"] = alerts["signal_name"].apply(get_example_tickers)
+    
     # =========================
     # NARRATIVE
     # =========================
 
     st.subheader("🧠 🧠 Current Environment")
 
-    if alerts.empty:
-        st.info("No active macro signals.")
-    else:
-        narrative = []
         for _, row in alerts.iterrows():
-            narrative.append(f"- {row['implication']}")
-
-        st.markdown("### Current Read:")
-        st.markdown("\n".join(narrative))
+            narrative.append(
+                f"- {row['alert_text']} → {row['cohort_impact']} → {row['example_names']}"
+            )
 
     # =========================
     # LANGUAGE SIGNALS
