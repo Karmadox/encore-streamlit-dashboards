@@ -100,21 +100,20 @@ def load_instruments_by_cohort():
     sql = """
         SELECT
             c.cohort_code,
-            i.ticker
+            c.cohort_name,
+            i.ticker,
+            w.weight_pct
         FROM encoredb.instrument_cohort_weights w
         JOIN encoredb.instruments i
             ON i.instrument_id = w.instrument_id
         JOIN encoredb.cohorts c
             ON c.cohort_id = w.cohort_id
-        WHERE w.effective_date = (
-            SELECT MAX(effective_date)
-            FROM encoredb.instrument_cohort_weights
-        )
+        WHERE w.is_primary = TRUE
+          AND i.active_flag = TRUE
     """
 
     with get_conn() as conn:
         return pd.read_sql(sql, conn)
-
 
 # 🔥 OPTIMIZED + CORRECT PRIMARY LOGIC
 @st.cache_data(ttl=300)
@@ -550,13 +549,24 @@ with tabs[3]:
             return ", ".join(names) if names else "General market"
     
         def get_example_tickers(signal_name):
+
             codes = map_cohort_codes(signal_name)
-    
-            tickers = inst_df[
+        
+            df = inst_df[
                 inst_df["cohort_code"].isin(codes)
-            ]["ticker"].unique()
-    
-            return ", ".join(tickers[:5]) if len(tickers) > 0 else "No mapped instruments"
+            ].copy()
+        
+            if df.empty:
+                return "No mapped instruments"
+        
+            # 🔥 THIS IS THE FIX
+            df = df.sort_values("weight_pct", ascending=False)
+        
+            top = df.head(5)
+        
+            return ", ".join(
+                [f"{r.ticker} ({r.weight_pct:.0f}%)" for _, r in top.iterrows()]
+            )
     
         alerts["cohort_impact"] = alerts["signal_name"].apply(resolve_cohort_names)
         alerts["example_names"] = alerts["signal_name"].apply(get_example_tickers)
