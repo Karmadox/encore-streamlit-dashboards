@@ -407,7 +407,7 @@ def load_signal_alerts():
 
 with tabs[3]:
 
-    st.subheader("📡 Signal Alerts")
+    st.subheader("📡 Active Signals")
 
     # --- EXPANDER (INTERPRETATION ONLY) ---
     with st.expander("🧭 How to interpret this tab", expanded=False):
@@ -485,7 +485,7 @@ with tabs[3]:
     # NARRATIVE
     # =========================
 
-    st.subheader("🧠 System Narrative")
+    st.subheader("🧠 🧠 Current Environment")
 
     if alerts.empty:
         st.info("No active macro signals.")
