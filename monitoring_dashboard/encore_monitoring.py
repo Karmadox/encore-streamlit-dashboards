@@ -438,55 +438,71 @@ with tabs[3]:
         signal → persistence → transmission → impact
         """)
 
+    # =========================
+    # MAPPING FUNCTION
+    # =========================
+
     def map_implication(signal_name):
+        mapping = {
+            "gasoline_shock": "Consumer disposable income under pressure → risk to low-income cohorts",
+            "discretionary_stress": "Trade-down behaviour → pressure on discretionary retail",
+            "rates_spike": "Tighter financial conditions → housing / credit-sensitive slowdown",
+            "vol_regime": "Risk-off environment → broader demand uncertainty",
+            "recession_search_spike": "Rising recession fear → sentiment deterioration",
+            "recession_search_elevated": "Elevated macro concern → caution building",
+            "recession_search_decline": "Macro concern easing → sentiment stabilising / improving"
+        }
+        return mapping.get(signal_name, "General monitoring signal")
 
-    mapping = {
-        "gasoline_shock": "Consumer disposable income under pressure → risk to low-income cohorts",
-        "discretionary_stress": "Trade-down behaviour → pressure on discretionary retail",
-        "rates_spike": "Tighter financial conditions → housing / credit-sensitive slowdown",
-        "vol_regime": "Risk-off environment → broader demand uncertainty",
+    # =========================
+    # ALERTS
+    # =========================
 
-        "recession_search_spike": "Rising recession fear → sentiment deterioration",
-        "recession_search_elevated": "Elevated macro concern → caution building",
-        "recession_search_decline": "Macro concern easing → sentiment stabilising / improving"
-    }
-
-    return mapping.get(signal_name, "General monitoring signal")
-    # --- ALERTS (ALWAYS VISIBLE) ---
     alerts = load_signal_alerts()
-    
+
     if not alerts.empty:
-    alerts["implication"] = alerts["signal_name"].apply(map_implication)
+        alerts["implication"] = alerts["signal_name"].apply(map_implication)
 
     if alerts.empty:
         st.success("No active alerts.")
     else:
         st.warning(f"{len(alerts)} recent alerts")
         st.dataframe(
-            alerts[[
-                "date",
-                "signal_name",
-                "severity",
-                "alert_text",
-                "implication",
-                "created_at"
-            ]],
+            alerts[
+                [
+                    "date",
+                    "signal_name",
+                    "severity",
+                    "alert_text",
+                    "implication",
+                    "created_at"
+                ]
+            ],
             use_container_width=True
         )
+
+    # =========================
+    # NARRATIVE
+    # =========================
+
     st.subheader("🧠 System Narrative")
 
     if alerts.empty:
         st.info("No active macro signals.")
     else:
-
         narrative = []
-
         for _, row in alerts.iterrows():
             narrative.append(f"- {row['implication']}")
-            st.markdown("### Current Read:")
-            st.markdown("\n".join(narrative))
-            st.subheader("🔍 Language / Search Signals")
-    
+
+        st.markdown("### Current Read:")
+        st.markdown("\n".join(narrative))
+
+    # =========================
+    # LANGUAGE SIGNALS
+    # =========================
+
+    st.subheader("🔍 Language / Search Signals")
+
     @st.cache_data(ttl=60)
     def load_language_signals():
         sql = """
@@ -502,47 +518,46 @@ with tabs[3]:
         """
         with get_conn() as conn:
             return pd.read_sql(sql, conn)
-    
+
     lang = load_language_signals()
-    
+
     if lang.empty:
         st.info("No language signals available.")
-    
+
     else:
-    
         # -----------------------------
         # PREP
         # -----------------------------
         lang["timestamp"] = pd.to_datetime(lang["timestamp"])
         lang = lang.sort_values("timestamp")
-    
+
         latest_rows = []
-    
+
         for kw in lang["keyword"].unique():
-    
+
             df_kw = lang[lang["keyword"] == kw].copy()
-    
+
             df_kw["mean_4w"] = df_kw["normalized_score"].rolling(4).mean()
             df_kw["std_4w"] = df_kw["normalized_score"].rolling(4).std()
-    
+
             df_kw["zscore"] = (
                 (df_kw["normalized_score"] - df_kw["mean_4w"]) /
                 df_kw["std_4w"]
             )
-    
+
             df_kw["roc_4w"] = df_kw["normalized_score"].pct_change(4)
-    
+
             latest = df_kw.iloc[-1]
-    
+
             latest_rows.append({
                 "keyword": kw,
                 "level": latest["normalized_score"],
                 "zscore": latest["zscore"],
                 "roc_4w": latest["roc_4w"]
             })
-    
+
         summary = pd.DataFrame(latest_rows)
-    
+
         # -----------------------------
         # CLASSIFICATION
         # -----------------------------
@@ -555,9 +570,9 @@ with tabs[3]:
                 return "🟡 Rising"
             else:
                 return "🟢 Normal"
-    
+
         summary["signal"] = summary.apply(classify, axis=1)
-    
+
         # -----------------------------
         # DISPLAY
         # -----------------------------
