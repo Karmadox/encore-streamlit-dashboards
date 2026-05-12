@@ -438,16 +438,54 @@ with tabs[3]:
         signal → persistence → transmission → impact
         """)
 
+    def map_implication(signal_name):
+
+    mapping = {
+        "gasoline_shock": "Consumer disposable income under pressure → risk to low-income cohorts",
+        "discretionary_stress": "Trade-down behaviour → pressure on discretionary retail",
+        "rates_spike": "Tighter financial conditions → housing / credit-sensitive slowdown",
+        "vol_regime": "Risk-off environment → broader demand uncertainty",
+
+        "recession_search_spike": "Rising recession fear → sentiment deterioration",
+        "recession_search_elevated": "Elevated macro concern → caution building",
+        "recession_search_decline": "Macro concern easing → sentiment stabilising / improving"
+    }
+
+    return mapping.get(signal_name, "General monitoring signal")
     # --- ALERTS (ALWAYS VISIBLE) ---
     alerts = load_signal_alerts()
+    
+    if not alerts.empty:
+    alerts["implication"] = alerts["signal_name"].apply(map_implication)
 
     if alerts.empty:
         st.success("No active alerts.")
     else:
         st.warning(f"{len(alerts)} recent alerts")
-        st.dataframe(alerts, use_container_width=True)
-        
-    st.subheader("🔍 Language / Search Signals")
+        st.dataframe(
+            alerts[[
+                "date",
+                "signal_name",
+                "severity",
+                "alert_text",
+                "implication",
+                "created_at"
+            ]],
+            use_container_width=True
+        )
+    st.subheader("🧠 System Narrative")
+
+    if alerts.empty:
+        st.info("No active macro signals.")
+    else:
+
+        narrative = []
+
+        for _, row in alerts.iterrows():
+            narrative.append(f"- {row['implication']}")
+            st.markdown("### Current Read:")
+            st.markdown("\n".join(narrative))
+            st.subheader("🔍 Language / Search Signals")
     
     @st.cache_data(ttl=60)
     def load_language_signals():
