@@ -598,7 +598,7 @@ with tabs[3]:
     narrative = []
     for _, row in alerts.iterrows():
         if row["cohort_impact"] == "General market":
-        continue  # skip weak signals
+            continue  # skip weak signals
 
         narrative.append(
             f"- {row['alert_text']} → {row['cohort_impact']} → {row['example_names']}"
