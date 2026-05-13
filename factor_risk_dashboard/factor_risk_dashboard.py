@@ -1,7 +1,9 @@
 import streamlit as st
 import pandas as pd
 import psycopg2
+from psycopg2 import InterfaceError, OperationalError
 from datetime import datetime
+
 
 # -------------------------------------------------
 # PASSWORD AUTH
@@ -45,7 +47,6 @@ st.set_page_config(
 # DATABASE CONNECTION
 # -------------------------------------------------
 
-@st.cache_resource
 def get_connection():
     return psycopg2.connect(
         dbname=st.secrets["db"]["dbname"],
@@ -53,16 +54,24 @@ def get_connection():
         password=st.secrets["db"]["password"],
         host=st.secrets["db"]["host"],
         port=st.secrets["db"]["port"],
+        connect_timeout=10,
     )
 
 @st.cache_data(ttl=300)
 def run_query(query):
     conn = get_connection()
-    return pd.read_sql(query, conn)
+    try:
+        return pd.read_sql(query, conn)
+    finally:
+        conn.close()
 
 def run_query_no_cache(query):
     conn = get_connection()
-    return pd.read_sql(query, conn)
+    try:
+        return pd.read_sql(query, conn)
+    finally:
+        conn.close()
+
 
 # -------------------------------------------------
 # MANUAL REFRESH BUTTON
