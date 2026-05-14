@@ -427,10 +427,12 @@ else:
     )
 
 # -------------------------------------------------
-# SECTION 4 — Expected Move + Tail Risk
+# SECTION 4 — Expected Move + Tail Risk (FIXED)
 # -------------------------------------------------
 
 st.markdown("## 🎯 Expected Move + Tail Risk (Analog Regimes)")
+
+MIN_OBS = 30  # 🔥 critical threshold
 
 @st.cache_data(ttl=300)
 def load_regime_map():
@@ -460,13 +462,11 @@ def classify_gex(gex):
         return "NEG"
 
 
-def build_regime(gex, spot=None):
+def build_regime(gex):
     base = classify_gex(gex)
-
     if base is None:
         return None
 
-    # crude magnitude proxy (until IV is added)
     if abs(gex) > 2e7:
         move = "MED"
     else:
@@ -474,16 +474,21 @@ def build_regime(gex, spot=None):
 
     return f"{base}_{move}_LOW_VOL"
 
+
 def compute_false_stability(row):
-    if pd.isna(row["gex"]) or pd.isna(row["break_rate"]):
+    # 🔥 ONLY VALID if enough observations
+    if row["n_obs"] < MIN_OBS:
         return False
-    return (row["gex"] > 0) and (row["break_rate"] > 0.3)
+
+    return (
+        (row["gex"] > 0) and
+        (row["break_rate"] > 0.3)
+    )
 
 
 if 'merged' in locals() and not merged.empty:
 
     regime_map = load_regime_map()
-
     df_exp = merged.copy()
 
     # ----------------------------------------
@@ -507,7 +512,15 @@ if 'merged' in locals() and not merged.empty:
     df_exp["break_prob"] = df_exp["break_rate"] * 100
 
     # ----------------------------------------
-    # FALSE STABILITY FLAG (🔥 KEY SIGNAL)
+    # HANDLE LOW SAMPLE (🔥 KEY FIX)
+    # ----------------------------------------
+
+    low_sample_mask = df_exp["n_obs"] < MIN_OBS
+
+    df_exp.loc[low_sample_mask, ["expected_move", "tail_move", "break_prob"]] = None
+
+    # ----------------------------------------
+    # FALSE STABILITY (FIXED)
     # ----------------------------------------
 
     df_exp["false_stability"] = df_exp.apply(compute_false_stability, axis=1)
@@ -525,12 +538,17 @@ if 'merged' in locals() and not merged.empty:
         return f"{'-' if v < 0 else '+'}${abs(v)/1e6:,.1f}M"
 
     def risk_label(row):
+
+        if row["n_obs"] < MIN_OBS:
+            return "⚠️ Low Sample"
+
         if row["false_stability"]:
             return "🔥 False Stability"
-        elif row["gex"] < 0:
+
+        if row["gex"] < 0:
             return "⚠️ Short Gamma"
-        else:
-            return "Normal"
+
+        return "Normal"
 
     df_show = df_exp.copy()
 
