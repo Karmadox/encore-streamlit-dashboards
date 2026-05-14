@@ -505,8 +505,14 @@ if show_all_universe:
     # Pull directly from panel for selected date
     date_obj = pd.to_datetime(sel_date).date()
 
-    df_exp = panel[panel["earnings_date"] == date_obj].copy()
+    df_exp = panel.copy()
 
+    # Optional: only future / recent
+    df_exp = df_exp[
+        pd.to_datetime(df_exp["earnings_date"]) >= pd.Timestamp.today() - pd.Timedelta(days=7)
+    ]
+
+    df_exp["description"] = df_exp["ticker"]
     if df_exp.empty:
         st.info("No universe data available for this date.")
         st.stop()
