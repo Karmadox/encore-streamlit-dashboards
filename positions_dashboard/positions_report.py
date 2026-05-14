@@ -989,66 +989,104 @@ elif active_tab == "📈 Price Change Driven":
         )
 
 # =================================================
-# TAB 4 — 52W REGIME MONITOR
+# TAB 4 — HOLDINGS WITHIN 5% OF 52W HIGH / LOW
 # =================================================
 elif active_tab == "📊 52W Regime Monitor":
 
-    st.header("📊 Portfolio 52-Week Regime Monitor")
+    st.header("📊 Holdings Within 5% of 52-Week High / Low")
 
     df = load_regime_history()
 
     if df.empty:
-        st.info("No regime history available yet.")
+        st.info("No 52-week positioning data available yet.")
         st.stop()
 
-    # -------------------------------
-    # Gross Exposure Chart
-    # -------------------------------
-    import plotly.express as px
+    # Ensure proper sorting
+    df = df.sort_values("snapshot_date")
 
-    fig = px.line(
-        df,
-        x="snapshot_date",
-        y=["pct_gross_near_high", "pct_gross_near_low"],
-        title="Gross Exposure Near 52W High vs Low"
+    # ------------------------------------------------
+    # Executive Summary Metrics (Latest Snapshot)
+    # ------------------------------------------------
+    latest = df.iloc[-1]
+
+    st.subheader("Current Positioning")
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric(
+        "% Gross Within 5% of 52W High",
+        f"{latest['pct_gross_near_high']}%"
     )
 
-    st.plotly_chart(fig, use_container_width=True)
-
-    # -------------------------------
-    # Net Regime Score
-    # -------------------------------
-    df["net_regime_score"] = (
-        df["pct_gross_near_high"] - df["pct_gross_near_low"]
+    col2.metric(
+        "% Gross Within 5% of 52W Low",
+        f"{latest['pct_gross_near_low']}%"
     )
 
-    fig2 = px.line(
-        df,
-        x="snapshot_date",
-        y="net_regime_score",
-        title="Net Regime Score (High % − Low %)"
+    net_positioning = (
+        latest["pct_gross_near_high"] -
+        latest["pct_gross_near_low"]
     )
 
-    st.plotly_chart(fig2, use_container_width=True)
+    col3.metric(
+        "Net Positioning (High − Low)",
+        f"{net_positioning:.2f}%"
+    )
 
-    # -------------------------------
-    # Latest Snapshot Table
-    # -------------------------------
-    st.subheader("Latest Snapshot")
+    st.divider()
 
-    latest = df.sort_values("snapshot_date").iloc[-1:]
+    # ------------------------------------------------
+    # Charts (only show if >1 snapshot)
+    # ------------------------------------------------
+    if len(df) > 1:
+
+        import plotly.express as px
+
+        # Gross exposure chart
+        fig = px.line(
+            df,
+            x="snapshot_date",
+            y=["pct_gross_near_high", "pct_gross_near_low"],
+            title="% Gross Exposure Within 5% of 52W High vs 52W Low"
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Net positioning chart
+        df["net_positioning"] = (
+            df["pct_gross_near_high"] -
+            df["pct_gross_near_low"]
+        )
+
+        fig2 = px.line(
+            df,
+            x="snapshot_date",
+            y="net_positioning",
+            title="Net Positioning (High % − Low %)"
+        )
+
+        st.plotly_chart(fig2, use_container_width=True)
+
+    else:
+        st.info(
+            "Only one snapshot available. Charts will appear once additional daily history is recorded."
+        )
+
+    st.divider()
+
+    # ------------------------------------------------
+    # Latest Snapshot Table (Detailed)
+    # ------------------------------------------------
+    st.subheader("Latest Snapshot Details")
 
     st.dataframe(
-        latest[
-            [
-                "snapshot_date",
-                "total_holdings",
-                "pct_names_near_high",
-                "pct_names_near_low",
-                "pct_gross_near_high",
-                "pct_gross_near_low",
-            ]
-        ],
+        df.tail(1)[[
+            "snapshot_date",
+            "total_holdings",
+            "pct_names_near_high",
+            "pct_names_near_low",
+            "pct_gross_near_high",
+            "pct_gross_near_low",
+        ]],
         width="stretch",
-    )
-    
+    )    
