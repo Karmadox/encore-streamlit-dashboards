@@ -304,10 +304,68 @@ This dashboard helps answer:
 
 ---
 
+### 🎯 4. Expected Move + Tail Risk (Analog Regimes)
+
+This section answers:
+
+> **“What happened historically in setups like this?”**
+
+Each stock is mapped to a **historical analog regime** based on:
+- Dealer positioning (**GEX**)
+- Typical move size bucket
+
+We then look at **all past earnings events with similar setups**.
+
+#### Key fields:
+
+- **Expected Move**
+  → Average 1-day post-earnings move  
+  → “What normally happens”
+
+- **Tail Move (P90)**
+  → 90th percentile move  
+  → “What happens in stressed outcomes”
+
+- **Break Prob**
+  → % of times move exceeded ~3%  
+  → Proxy for **event risk / convexity**
+
+---
+
+#### 🚨 Risk Flags
+
+- **🔥 False Stability**
+  → Dealers are long gamma  
+  → BUT historically moves still break  
+  → *Most dangerous setup*
+
+- **⚠️ Short Gamma**
+  → Dealers amplify moves  
+  → Higher chance of large reactions
+
+- **⚠️ Low Sample**
+  → Too few historical analogs  
+  → Model is **not reliable here**
+
+---
+
+#### ⚠️ Important nuance
+
+Not all regimes are equally reliable:
+
+- **High observations (100s)** → strong statistical signal  
+- **Low observations (<30)** → weak / unstable signal  
+
+👉 In low-sample regimes:
+> Use GEX intuition more than historical averages
+
+---
+
 ### ⚠️ Important notes
 
 - GEX is **not a directional signal** (it doesn’t predict up vs down)
 - It is a **volatility / flow signal**
+- Analog regimes are **probabilistic, not predictive**
 - Best used alongside:
   - Positioning
   - Earnings expectations
@@ -319,6 +377,7 @@ This dashboard helps answer:
 
 - **Large negative GEX → expect bigger moves**
 - **Large positive GEX → expect more contained reactions**
+- **False stability → beware of surprise breakouts**
 
 ---
 
@@ -326,7 +385,7 @@ This dashboard helps answer:
 
 This dashboard shows:
 
-> **Where dealer positioning may amplify or suppress volatility around earnings.**
+> **Where dealer positioning and history suggest earnings moves may be amplified, suppressed — or mispriced.**
 """)
     
 # -------------------------------------------------
