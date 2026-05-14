@@ -427,33 +427,29 @@ else:
     )
 
 # -------------------------------------------------
-# SECTION 4 — Expected Move (REGIME-BASED)
+# SECTION 4 — Expected Move + Tail Risk
 # -------------------------------------------------
 
-st.markdown("## 🎯 Expected Move — Regime-Based Forecast")
+st.markdown("## 🎯 Expected Move + Tail Risk (Analog Regimes)")
 
 @st.cache_data(ttl=300)
 def load_regime_map():
-    try:
-        with get_conn() as conn:
-            df = pd.read_sql("""
-                SELECT
-                    analog_regime,
-                    AVG(realised_move_1d) AS expected_move,
-                    COUNT(*) AS n_obs
-                FROM research.earnings_regimes
-                WHERE realised_move_1d IS NOT NULL
-                GROUP BY analog_regime
-            """, conn)
-
-        return df
-
-    except Exception as e:
-        st.error(f"🚨 DB ERROR (regime_map): {e}")
-        return pd.DataFrame()
+    with get_conn() as conn:
+        return pd.read_sql("""
+            SELECT
+                analog_regime,
+                COUNT(*) AS n_obs,
+                AVG(realised_move_1d) AS avg_move,
+                STDDEV(realised_move_1d) AS vol,
+                PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY realised_move_1d) AS p90_move,
+                AVG(CASE WHEN realised_move_1d > 0.03 THEN 1 ELSE 0 END) AS break_rate
+            FROM research.earnings_regimes
+            WHERE realised_move_1d IS NOT NULL
+            GROUP BY analog_regime
+        """, conn)
 
 
-def classify_gex_regime(gex):
+def classify_gex(gex):
     if pd.isna(gex):
         return None
     if gex > 3e7:
@@ -464,30 +460,18 @@ def classify_gex_regime(gex):
         return "NEG"
 
 
-def classify_move_bucket(gex):
-    """
-    Simple placeholder:
-    We don't know move yet (pre-earnings),
-    so assume SMALL bucket baseline.
-
-    This will be upgraded later with implied vol.
-    """
-    return "SMALL"
-
-
-def build_analog_regime(gex):
-    base = classify_gex_regime(gex)
-    move = classify_move_bucket(gex)
-
+def build_regime(gex):
+    base = classify_gex(gex)
     if base is None:
         return None
+    return f"{base}_SMALL_LOW_VOL"   # current approximation
 
-    return f"{base}_{move}_LOW_VOL"
 
+def compute_false_stability(row):
+    if pd.isna(row["gex"]) or pd.isna(row["break_rate"]):
+        return False
+    return (row["gex"] > 0) and (row["break_rate"] > 0.3)
 
-# ----------------------------------------
-# APPLY TO SELECTED DAY DATA
-# ----------------------------------------
 
 if 'merged' in locals() and not merged.empty:
 
@@ -495,73 +479,83 @@ if 'merged' in locals() and not merged.empty:
 
     df_exp = merged.copy()
 
-    # Build regime
-    df_exp["analog_regime"] = df_exp["gex"].apply(build_analog_regime)
+    # ----------------------------------------
+    # BUILD REGIME
+    # ----------------------------------------
 
-    # Merge expected move
-    df_exp = df_exp.merge(
-        regime_map,
-        on="analog_regime",
-        how="left"
-    )
+    df_exp["analog_regime"] = df_exp["gex"].apply(build_regime)
 
-    # Formatting
-    df_exp["expected_move_pct"] = df_exp["expected_move"] * 100
+    # ----------------------------------------
+    # MERGE HISTORICAL ANALOGS
+    # ----------------------------------------
 
-    # Clean display
-    display_cols = [
-        "ticker",
-        "description",
-        "spot",
-        "gex",
-        "analog_regime",
-        "expected_move_pct",
-        "n_obs"
-    ]
+    df_exp = df_exp.merge(regime_map, on="analog_regime", how="left")
 
-    display_cols = [c for c in display_cols if c in df_exp.columns]
+    # ----------------------------------------
+    # CORE METRICS
+    # ----------------------------------------
 
-    df_show = df_exp[display_cols].copy()
+    df_exp["expected_move"] = df_exp["avg_move"] * 100
+    df_exp["tail_move"] = df_exp["p90_move"] * 100
+    df_exp["break_prob"] = df_exp["break_rate"] * 100
 
-    # Pretty formatting
+    # ----------------------------------------
+    # FALSE STABILITY FLAG (🔥 KEY SIGNAL)
+    # ----------------------------------------
+
+    df_exp["false_stability"] = df_exp.apply(compute_false_stability, axis=1)
+
+    # ----------------------------------------
+    # FORMATTING
+    # ----------------------------------------
+
     def fmt_pct(v):
-        return f"{v:.2f}%" if pd.notna(v) else "—"
-
-    def fmt_spot(v):
-        return f"${v:,.2f}" if pd.notna(v) else "—"
+        return f"{v:.1f}%" if pd.notna(v) else "—"
 
     def fmt_gex(v):
         if pd.isna(v):
             return "—"
-        return f"{'-' if v < 0 else '+'}${abs(v)/1e6:,.2f}M"
+        return f"{'-' if v < 0 else '+'}${abs(v)/1e6:,.1f}M"
 
-    if "spot" in df_show.columns:
-        df_show["spot"] = df_show["spot"].apply(fmt_spot)
+    def risk_label(row):
+        if row["false_stability"]:
+            return "🔥 False Stability"
+        elif row["gex"] < 0:
+            return "⚠️ Short Gamma"
+        else:
+            return "Normal"
 
-    if "gex" in df_show.columns:
-        df_show["gex"] = df_show["gex"].apply(fmt_gex)
+    df_show = df_exp.copy()
 
-    if "expected_move_pct" in df_show.columns:
-        df_show["expected_move_pct"] = df_show["expected_move_pct"].apply(fmt_pct)
+    df_show["GEX"] = df_show["gex"].apply(fmt_gex)
+    df_show["Expected Move"] = df_show["expected_move"].apply(fmt_pct)
+    df_show["Tail Move (P90)"] = df_show["tail_move"].apply(fmt_pct)
+    df_show["Break Prob"] = df_show["break_prob"].apply(fmt_pct)
+    df_show["Risk"] = df_show.apply(risk_label, axis=1)
 
-    if "n_obs" in df_show.columns:
-        df_show["n_obs"] = df_show["n_obs"].fillna(0).astype(int)
+    df_show = df_show[[
+        "ticker",
+        "description",
+        "GEX",
+        "analog_regime",
+        "Expected Move",
+        "Tail Move (P90)",
+        "Break Prob",
+        "Risk",
+        "n_obs"
+    ]]
 
-    # Rename columns for UI
     df_show = df_show.rename(columns={
         "ticker": "Ticker",
         "description": "Name",
-        "spot": "Spot",
-        "gex": "GEX",
         "analog_regime": "Regime",
-        "expected_move_pct": "Expected Move",
         "n_obs": "Obs"
     })
 
     st.dataframe(df_show, use_container_width=True)
 
 else:
-    st.info("No data available to compute expected move.")
+    st.info("No data available.")
     
 # -------------------------------------------------
 # FOOTER
