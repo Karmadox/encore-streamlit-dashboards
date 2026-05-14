@@ -507,6 +507,14 @@ if show_all_universe:
 
     df_exp = panel.copy()
 
+    # ----------------------------------------
+    # 🔥 DEDUPLICATE TO LATEST PER TICKER
+    # ----------------------------------------
+    
+    df_exp = df_exp.sort_values("asof_date", ascending=False)
+    
+    df_exp = df_exp.drop_duplicates(subset=["ticker"], keep="first")
+
     # Optional: only future / recent
     df_exp = df_exp[
         pd.to_datetime(df_exp["earnings_date"]) >= pd.Timestamp.today() - pd.Timedelta(days=7)
