@@ -427,12 +427,22 @@ else:
     )
 
 # -------------------------------------------------
-# SECTION 4 — Expected Move + Tail Risk (FIXED)
+# SECTION 4 — Expected Move + Tail Risk (FIXED + UNIVERSE TOGGLE)
 # -------------------------------------------------
 
 st.markdown("## 🎯 Expected Move + Tail Risk (Analog Regimes)")
 
 MIN_OBS = 30  # 🔥 critical threshold
+
+# -------------------------------------------------
+# 🔁 TOGGLE: Portfolio vs Full Universe
+# -------------------------------------------------
+
+show_all_universe = st.toggle("Show full universe (not just portfolio)", value=False)
+
+# -------------------------------------------------
+# LOAD ANALOG MAP
+# -------------------------------------------------
 
 @st.cache_data(ttl=300)
 def load_regime_map():
@@ -450,6 +460,9 @@ def load_regime_map():
             GROUP BY analog_regime
         """, conn)
 
+# -------------------------------------------------
+# REGIME BUILDERS
+# -------------------------------------------------
 
 def classify_gex(gex):
     if pd.isna(gex):
@@ -476,7 +489,6 @@ def build_regime(gex):
 
 
 def compute_false_stability(row):
-    # 🔥 ONLY VALID if enough observations
     if row["n_obs"] < MIN_OBS:
         return False
 
@@ -485,103 +497,125 @@ def compute_false_stability(row):
         (row["break_rate"] > 0.3)
     )
 
+# -------------------------------------------------
+# DATA SELECTION (🔥 KEY ADDITION)
+# -------------------------------------------------
 
-if 'merged' in locals() and not merged.empty:
+if show_all_universe:
+    # Pull directly from panel for selected date
+    date_obj = pd.to_datetime(sel_date).date()
 
-    regime_map = load_regime_map()
-    df_exp = merged.copy()
+    df_exp = panel[panel["earnings_date"] == date_obj].copy()
 
-    # ----------------------------------------
-    # BUILD REGIME
-    # ----------------------------------------
+    if df_exp.empty:
+        st.info("No universe data available for this date.")
+        st.stop()
 
-    df_exp["analog_regime"] = df_exp["gex"].apply(build_regime)
-
-    # ----------------------------------------
-    # MERGE HISTORICAL ANALOGS
-    # ----------------------------------------
-
-    df_exp = df_exp.merge(regime_map, on="analog_regime", how="left")
-
-    # ----------------------------------------
-    # CORE METRICS
-    # ----------------------------------------
-
-    df_exp["expected_move"] = df_exp["avg_move"] * 100
-    df_exp["tail_move"] = df_exp["p90_move"] * 100
-    df_exp["break_prob"] = df_exp["break_rate"] * 100
-
-    # ----------------------------------------
-    # HANDLE LOW SAMPLE (🔥 KEY FIX)
-    # ----------------------------------------
-
-    low_sample_mask = df_exp["n_obs"] < MIN_OBS
-
-    df_exp.loc[low_sample_mask, ["expected_move", "tail_move", "break_prob"]] = None
-
-    # ----------------------------------------
-    # FALSE STABILITY (FIXED)
-    # ----------------------------------------
-
-    df_exp["false_stability"] = df_exp.apply(compute_false_stability, axis=1)
-
-    # ----------------------------------------
-    # FORMATTING
-    # ----------------------------------------
-
-    def fmt_pct(v):
-        return f"{v:.1f}%" if pd.notna(v) else "—"
-
-    def fmt_gex(v):
-        if pd.isna(v):
-            return "—"
-        return f"{'-' if v < 0 else '+'}${abs(v)/1e6:,.1f}M"
-
-    def risk_label(row):
-
-        if row["n_obs"] < MIN_OBS:
-            return "⚠️ Low Sample"
-
-        if row["false_stability"]:
-            return "🔥 False Stability"
-
-        if row["gex"] < 0:
-            return "⚠️ Short Gamma"
-
-        return "Normal"
-
-    df_show = df_exp.copy()
-
-    df_show["GEX"] = df_show["gex"].apply(fmt_gex)
-    df_show["Expected Move"] = df_show["expected_move"].apply(fmt_pct)
-    df_show["Tail Move (P90)"] = df_show["tail_move"].apply(fmt_pct)
-    df_show["Break Prob"] = df_show["break_prob"].apply(fmt_pct)
-    df_show["Risk"] = df_show.apply(risk_label, axis=1)
-
-    df_show = df_show[[
-        "ticker",
-        "description",
-        "GEX",
-        "analog_regime",
-        "Expected Move",
-        "Tail Move (P90)",
-        "Break Prob",
-        "Risk",
-        "n_obs"
-    ]]
-
-    df_show = df_show.rename(columns={
-        "ticker": "Ticker",
-        "description": "Name",
-        "analog_regime": "Regime",
-        "n_obs": "Obs"
-    })
-
-    st.dataframe(df_show, use_container_width=True)
+    df_exp["description"] = df_exp["ticker"]  # fallback label
 
 else:
-    st.info("No data available.")
-    
+    if 'merged' not in locals() or merged.empty:
+        st.info("No portfolio data available.")
+        st.stop()
+
+    df_exp = merged.copy()
+
+# -------------------------------------------------
+# ANALOG ENRICHMENT
+# -------------------------------------------------
+
+regime_map = load_regime_map()
+
+df_exp["analog_regime"] = df_exp["gex"].apply(build_regime)
+
+df_exp = df_exp.merge(regime_map, on="analog_regime", how="left")
+
+# -------------------------------------------------
+# CORE METRICS
+# -------------------------------------------------
+
+df_exp["expected_move"] = df_exp["avg_move"] * 100
+df_exp["tail_move"] = df_exp["p90_move"] * 100
+df_exp["break_prob"] = df_exp["break_rate"] * 100
+
+# -------------------------------------------------
+# LOW SAMPLE HANDLING
+# -------------------------------------------------
+
+low_sample_mask = df_exp["n_obs"] < MIN_OBS
+
+df_exp.loc[low_sample_mask, ["expected_move", "tail_move", "break_prob"]] = None
+
+# -------------------------------------------------
+# FALSE STABILITY
+# -------------------------------------------------
+
+df_exp["false_stability"] = df_exp.apply(compute_false_stability, axis=1)
+
+# -------------------------------------------------
+# FORMATTERS
+# -------------------------------------------------
+
+def fmt_pct(v):
+    return f"{v:.1f}%" if pd.notna(v) else "—"
+
+def fmt_gex(v):
+    if pd.isna(v):
+        return "—"
+    return f"{'-' if v < 0 else '+'}${abs(v)/1e6:,.1f}M"
+
+def risk_label(row):
+
+    if row["n_obs"] < MIN_OBS:
+        return "⚠️ Low Sample"
+
+    if row["false_stability"]:
+        return "🔥 False Stability"
+
+    if row["gex"] < 0:
+        return "⚠️ Short Gamma"
+
+    return "Normal"
+
+# -------------------------------------------------
+# DISPLAY
+# -------------------------------------------------
+
+df_show = df_exp.copy()
+
+df_show["GEX"] = df_show["gex"].apply(fmt_gex)
+df_show["Expected Move"] = df_show["expected_move"].apply(fmt_pct)
+df_show["Tail Move (P90)"] = df_show["tail_move"].apply(fmt_pct)
+df_show["Break Prob"] = df_show["break_prob"].apply(fmt_pct)
+df_show["Risk"] = df_show.apply(risk_label, axis=1)
+
+df_show = df_show[[
+    "ticker",
+    "description",
+    "GEX",
+    "analog_regime",
+    "Expected Move",
+    "Tail Move (P90)",
+    "Break Prob",
+    "Risk",
+    "n_obs"
+]]
+
+df_show = df_show.rename(columns={
+    "ticker": "Ticker",
+    "description": "Name",
+    "analog_regime": "Regime",
+    "n_obs": "Obs"
+})
+
+# Sort by risk importance
+df_show = df_show.sort_values(
+    by=["Risk", "GEX"],
+    ascending=[True, False]
+)
+
+st.dataframe(df_show, use_container_width=True)
+
 # -------------------------------------------------
 # FOOTER
 # -------------------------------------------------
