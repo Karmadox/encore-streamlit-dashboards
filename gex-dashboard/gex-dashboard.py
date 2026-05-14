@@ -611,9 +611,5 @@ df_show = df_show.sort_values(by=["Risk", "GEX"], ascending=[True, False])
 
 st.dataframe(df_show, use_container_width=True)
 
-# -------------------------------------------------
-# FOOTER
-# -------------------------------------------------
-
 st.divider()
 st.caption("Data: Databento + Bloomberg via Postgres pipeline.")
