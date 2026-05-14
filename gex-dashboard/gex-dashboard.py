@@ -425,6 +425,143 @@ else:
         _format_table(_gex_table(df_rec, show_event_date=True)),
         use_container_width=True
     )
+
+# -------------------------------------------------
+# SECTION 4 — Expected Move (REGIME-BASED)
+# -------------------------------------------------
+
+st.markdown("## 🎯 Expected Move — Regime-Based Forecast")
+
+@st.cache_data(ttl=300)
+def load_regime_map():
+    try:
+        with get_conn() as conn:
+            df = pd.read_sql("""
+                SELECT
+                    analog_regime,
+                    AVG(realised_move_1d) AS expected_move,
+                    COUNT(*) AS n_obs
+                FROM research.earnings_regimes
+                WHERE realised_move_1d IS NOT NULL
+                GROUP BY analog_regime
+            """, conn)
+
+        return df
+
+    except Exception as e:
+        st.error(f"🚨 DB ERROR (regime_map): {e}")
+        return pd.DataFrame()
+
+
+def classify_gex_regime(gex):
+    if pd.isna(gex):
+        return None
+    if gex > 3e7:
+        return "HIGH_POS"
+    elif gex > 0:
+        return "LOW_POS"
+    else:
+        return "NEG"
+
+
+def classify_move_bucket(gex):
+    """
+    Simple placeholder:
+    We don't know move yet (pre-earnings),
+    so assume SMALL bucket baseline.
+
+    This will be upgraded later with implied vol.
+    """
+    return "SMALL"
+
+
+def build_analog_regime(gex):
+    base = classify_gex_regime(gex)
+    move = classify_move_bucket(gex)
+
+    if base is None:
+        return None
+
+    return f"{base}_{move}_LOW_VOL"
+
+
+# ----------------------------------------
+# APPLY TO SELECTED DAY DATA
+# ----------------------------------------
+
+if 'merged' in locals() and not merged.empty:
+
+    regime_map = load_regime_map()
+
+    df_exp = merged.copy()
+
+    # Build regime
+    df_exp["analog_regime"] = df_exp["gex"].apply(build_analog_regime)
+
+    # Merge expected move
+    df_exp = df_exp.merge(
+        regime_map,
+        on="analog_regime",
+        how="left"
+    )
+
+    # Formatting
+    df_exp["expected_move_pct"] = df_exp["expected_move"] * 100
+
+    # Clean display
+    display_cols = [
+        "ticker",
+        "description",
+        "spot",
+        "gex",
+        "analog_regime",
+        "expected_move_pct",
+        "n_obs"
+    ]
+
+    display_cols = [c for c in display_cols if c in df_exp.columns]
+
+    df_show = df_exp[display_cols].copy()
+
+    # Pretty formatting
+    def fmt_pct(v):
+        return f"{v:.2f}%" if pd.notna(v) else "—"
+
+    def fmt_spot(v):
+        return f"${v:,.2f}" if pd.notna(v) else "—"
+
+    def fmt_gex(v):
+        if pd.isna(v):
+            return "—"
+        return f"{'-' if v < 0 else '+'}${abs(v)/1e6:,.2f}M"
+
+    if "spot" in df_show.columns:
+        df_show["spot"] = df_show["spot"].apply(fmt_spot)
+
+    if "gex" in df_show.columns:
+        df_show["gex"] = df_show["gex"].apply(fmt_gex)
+
+    if "expected_move_pct" in df_show.columns:
+        df_show["expected_move_pct"] = df_show["expected_move_pct"].apply(fmt_pct)
+
+    if "n_obs" in df_show.columns:
+        df_show["n_obs"] = df_show["n_obs"].fillna(0).astype(int)
+
+    # Rename columns for UI
+    df_show = df_show.rename(columns={
+        "ticker": "Ticker",
+        "description": "Name",
+        "spot": "Spot",
+        "gex": "GEX",
+        "analog_regime": "Regime",
+        "expected_move_pct": "Expected Move",
+        "n_obs": "Obs"
+    })
+
+    st.dataframe(df_show, use_container_width=True)
+
+else:
+    st.info("No data available to compute expected move.")
     
 # -------------------------------------------------
 # FOOTER
