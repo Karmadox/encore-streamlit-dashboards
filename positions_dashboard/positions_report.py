@@ -1079,8 +1079,8 @@ elif active_tab == "📊 52W Regime Monitor":
     # Latest Snapshot Table (Detailed)
     # ------------------------------------------------
     st.subheader("Latest Snapshot Details")
-
-    st.dataframe(
+    
+    latest_table = (
         df.tail(1)[[
             "snapshot_date",
             "total_holdings",
@@ -1088,6 +1088,15 @@ elif active_tab == "📊 52W Regime Monitor":
             "pct_names_near_low",
             "pct_gross_near_high",
             "pct_gross_near_low",
-        ]],
-        width="stretch",
-    )    
+        ]]
+        .rename(columns={
+            "snapshot_date": "Snapshot Date",
+            "total_holdings": "Total Holdings",
+            "pct_names_near_high": "% Names Within 5% of 52W High",
+            "pct_names_near_low": "% Names Within 5% of 52W Low",
+            "pct_gross_near_high": "% Gross Within 5% of 52W High",
+            "pct_gross_near_low": "% Gross Within 5% of 52W Low",
+        })
+    )
+
+    st.dataframe(latest_table, width="stretch")
