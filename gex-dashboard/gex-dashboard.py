@@ -460,12 +460,19 @@ def classify_gex(gex):
         return "NEG"
 
 
-def build_regime(gex):
+def build_regime(gex, spot=None):
     base = classify_gex(gex)
+
     if base is None:
         return None
-    return f"{base}_SMALL_LOW_VOL"   # current approximation
 
+    # crude magnitude proxy (until IV is added)
+    if abs(gex) > 2e7:
+        move = "MED"
+    else:
+        move = "SMALL"
+
+    return f"{base}_{move}_LOW_VOL"
 
 def compute_false_stability(row):
     if pd.isna(row["gex"]) or pd.isna(row["break_rate"]):
