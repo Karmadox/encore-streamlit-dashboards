@@ -109,6 +109,16 @@ TIME_GRID = TIME_BUCKETS
 # DATE HANDLING
 # -------------------------------------------------
 @st.cache_data(ttl=300)
+def load_regime_history():
+    sql = """
+        SELECT *
+        FROM encoredb.portfolio_52w_regime_snapshot
+        ORDER BY snapshot_date
+    """
+    with get_conn() as conn:
+        return pd.read_sql(sql, conn)
+
+@st.cache_data(ttl=300)
 def load_available_dates():
     sql = """
         SELECT DISTINCT snapshot_date
@@ -461,6 +471,7 @@ TAB_NAMES = [
     "🏭 Sector Driven",
     "📆 Daily Sector Driven",
     "📈 Price Change Driven",
+    "📊 52W Regime Monitor",
 ]
 
 if "active_tab" not in st.session_state:
@@ -976,3 +987,68 @@ elif active_tab == "📈 Price Change Driven":
             safe_sort(df, "effective_price_change_pct"),
             width="stretch",
         )
+
+# =================================================
+# TAB 4 — 52W REGIME MONITOR
+# =================================================
+elif active_tab == "📊 52W Regime Monitor":
+
+    st.header("📊 Portfolio 52-Week Regime Monitor")
+
+    df = load_regime_history()
+
+    if df.empty:
+        st.info("No regime history available yet.")
+        st.stop()
+
+    # -------------------------------
+    # Gross Exposure Chart
+    # -------------------------------
+    import plotly.express as px
+
+    fig = px.line(
+        df,
+        x="snapshot_date",
+        y=["pct_gross_near_high", "pct_gross_near_low"],
+        title="Gross Exposure Near 52W High vs Low"
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # -------------------------------
+    # Net Regime Score
+    # -------------------------------
+    df["net_regime_score"] = (
+        df["pct_gross_near_high"] - df["pct_gross_near_low"]
+    )
+
+    fig2 = px.line(
+        df,
+        x="snapshot_date",
+        y="net_regime_score",
+        title="Net Regime Score (High % − Low %)"
+    )
+
+    st.plotly_chart(fig2, use_container_width=True)
+
+    # -------------------------------
+    # Latest Snapshot Table
+    # -------------------------------
+    st.subheader("Latest Snapshot")
+
+    latest = df.sort_values("snapshot_date").iloc[-1:]
+
+    st.dataframe(
+        latest[
+            [
+                "snapshot_date",
+                "total_holdings",
+                "pct_names_near_high",
+                "pct_names_near_low",
+                "pct_gross_near_high",
+                "pct_gross_near_low",
+            ]
+        ],
+        width="stretch",
+    )
+    
