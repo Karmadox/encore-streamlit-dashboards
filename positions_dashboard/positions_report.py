@@ -529,9 +529,10 @@ if active_tab == "🏭 Sector Driven":
     # SECTOR HEATMAP + SELECTOR
     # -------------------------------
     with st.container():
+
         sector_ret = (
             intraday
-            .groupby(["snapshot_ts", "time_label", "egm_sector_v2"])
+            .groupby(["time_label", "egm_sector_v2"])
             .agg(
                 pnl=("daily_pnl", "sum"),
                 gross=("gross_notional", lambda x: x.abs().sum()),
@@ -570,7 +571,7 @@ if active_tab == "🏭 Sector Driven":
             ct = intraday.merge(cohorts, on="ticker", how="inner")
 
             cohort_ret = (
-                ct.groupby(["snapshot_ts", "time_label", "cohort_name"])
+                ct.groupby(["time_label", "cohort_name"])
                 .agg(
                     pnl=("daily_pnl", "sum"),
                     gross=("gross_notional", lambda x: x.abs().sum()),
