@@ -427,15 +427,15 @@ else:
     )
 
 # -------------------------------------------------
-# SECTION 4 — Expected Move + Tail Risk (FIXED + UNIVERSE TOGGLE)
+# SECTION 4 — Expected Move + Tail Risk (FINAL FIX)
 # -------------------------------------------------
 
 st.markdown("## 🎯 Expected Move + Tail Risk (Analog Regimes)")
 
-MIN_OBS = 30  # 🔥 critical threshold
+MIN_OBS = 30
 
 # -------------------------------------------------
-# 🔁 TOGGLE: Portfolio vs Full Universe
+# 🔁 TOGGLE
 # -------------------------------------------------
 
 show_all_universe = st.toggle("Show full universe (not just portfolio)", value=False)
@@ -461,7 +461,7 @@ def load_regime_map():
         """, conn)
 
 # -------------------------------------------------
-# REGIME BUILDERS
+# REGIME HELPERS
 # -------------------------------------------------
 
 def classify_gex(gex):
@@ -492,40 +492,26 @@ def compute_false_stability(row):
     if row["n_obs"] < MIN_OBS:
         return False
 
-    return (
-        (row["gex"] > 0) and
-        (row["break_rate"] > 0.3)
-    )
+    return (row["gex"] > 0) and (row["break_rate"] > 0.3)
 
 # -------------------------------------------------
-# DATA SELECTION (🔥 KEY ADDITION)
+# 🔥 DATA SELECTION (FIXED LOGIC)
 # -------------------------------------------------
 
 if show_all_universe:
-    # Pull directly from panel for selected date
-    date_obj = pd.to_datetime(sel_date).date()
 
     df_exp = panel.copy()
 
-    # ----------------------------------------
-    # 🔥 DEDUPLICATE TO LATEST PER TICKER
-    # ----------------------------------------
-    
-    df_exp = df_exp.sort_values("asof_date", ascending=False)
-    
+    # 🔥 CRITICAL FIX — SELECT MOST RELEVANT EARNINGS EVENT
+    df_exp["days_to_earnings"] = (
+        pd.to_datetime(df_exp["earnings_date"]) - pd.Timestamp.today()
+    ).abs()
+
+    df_exp = df_exp.sort_values("days_to_earnings")
+
     df_exp = df_exp.drop_duplicates(subset=["ticker"], keep="first")
 
-    # Optional: only future / recent
-    df_exp = df_exp[
-        pd.to_datetime(df_exp["earnings_date"]) >= pd.Timestamp.today() - pd.Timedelta(days=7)
-    ]
-
     df_exp["description"] = df_exp["ticker"]
-    if df_exp.empty:
-        st.info("No universe data available for this date.")
-        st.stop()
-
-    df_exp["description"] = df_exp["ticker"]  # fallback label
 
 else:
     if 'merged' not in locals() or merged.empty:
@@ -545,7 +531,7 @@ df_exp["analog_regime"] = df_exp["gex"].apply(build_regime)
 df_exp = df_exp.merge(regime_map, on="analog_regime", how="left")
 
 # -------------------------------------------------
-# CORE METRICS
+# METRICS
 # -------------------------------------------------
 
 df_exp["expected_move"] = df_exp["avg_move"] * 100
@@ -557,11 +543,10 @@ df_exp["break_prob"] = df_exp["break_rate"] * 100
 # -------------------------------------------------
 
 low_sample_mask = df_exp["n_obs"] < MIN_OBS
-
 df_exp.loc[low_sample_mask, ["expected_move", "tail_move", "break_prob"]] = None
 
 # -------------------------------------------------
-# FALSE STABILITY
+# FLAGS
 # -------------------------------------------------
 
 df_exp["false_stability"] = df_exp.apply(compute_false_stability, axis=1)
@@ -622,11 +607,7 @@ df_show = df_show.rename(columns={
     "n_obs": "Obs"
 })
 
-# Sort by risk importance
-df_show = df_show.sort_values(
-    by=["Risk", "GEX"],
-    ascending=[True, False]
-)
+df_show = df_show.sort_values(by=["Risk", "GEX"], ascending=[True, False])
 
 st.dataframe(df_show, use_container_width=True)
 
