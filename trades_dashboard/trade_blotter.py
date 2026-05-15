@@ -230,7 +230,11 @@ def build_column_format_dict(df):
 # STREAMLIT UI
 # ==========================================================
 
-st.set_page_config(layout="wide")
+st.set_page_config(
+    page_title="FIFO Trade Blotter Ledger",
+    page_icon="📊",
+    layout="wide"
+)
 st.title("📊 FIFO Trade Blotter Ledger")
 
 tickers = get_all_tickers()
