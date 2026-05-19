@@ -519,6 +519,19 @@ def load_regime_map():
             GROUP BY analog_regime
         """, conn)
 
+@st.cache_data(ttl=300)
+def load_ticker_history():
+    with get_conn() as conn:
+        return pd.read_sql("""
+            SELECT
+                ticker,
+                earnings_date,
+                analog_regime,
+                realised_move_1d
+            FROM research.earnings_regimes
+            WHERE realised_move_1d IS NOT NULL
+        """, conn)
+        
 # -------------------------------------------------
 # REGIME HELPERS
 # -------------------------------------------------
@@ -553,6 +566,29 @@ def compute_false_stability(row):
 
     return (row["gex"] > 0) and (row["break_rate"] > 0.3)
 
+hist = load_ticker_history()
+
+def compute_ticker_stats(row):
+
+    if pd.isna(row["analog_regime"]):
+        return pd.Series([None, None, None, 0])
+
+    sub = hist[
+        (hist["ticker"] == row["ticker"]) &
+        (hist["analog_regime"] == row["analog_regime"])
+    ]
+
+    n = len(sub)
+
+    if n == 0:
+        return pd.Series([None, None, None, 0])
+
+    avg = sub["realised_move_1d"].mean()
+    p90 = sub["realised_move_1d"].quantile(0.9)
+    brk = (sub["realised_move_1d"] > 0.03).mean()
+
+    return pd.Series([avg, p90, brk, n])
+    
 # -------------------------------------------------
 # 🔥 DATA SELECTION (FIXED LOGIC)
 # -------------------------------------------------
@@ -586,16 +622,45 @@ else:
 regime_map = load_regime_map()
 
 df_exp["analog_regime"] = df_exp["gex"].apply(build_regime)
+df_exp[["t_avg", "t_p90", "t_brk", "t_obs"]] = df_exp.apply(
+    compute_ticker_stats, axis=1
+)
 
 df_exp = df_exp.merge(regime_map, on="analog_regime", how="left")
 
 # -------------------------------------------------
-# METRICS
+# METRICS (🔥 FIXED: TICKER FIRST, THEN FALLBACK)
 # -------------------------------------------------
 
-df_exp["expected_move"] = df_exp["avg_move"] * 100
-df_exp["tail_move"] = df_exp["p90_move"] * 100
-df_exp["break_prob"] = df_exp["break_rate"] * 100
+def pick_metric(row, ticker_col, cross_col, obs_col):
+    """
+    Use ticker-specific stats if enough observations,
+    otherwise fall back to cross-sectional regime stats
+    """
+    if row[obs_col] >= MIN_OBS:
+        return row[ticker_col]
+
+    return row[cross_col]
+
+df_exp["expected_move"] = df_exp.apply(
+    lambda r: pick_metric(r, "t_avg", "avg_move", "t_obs"),
+    axis=1
+) * 100
+
+df_exp["tail_move"] = df_exp.apply(
+    lambda r: pick_metric(r, "t_p90", "p90_move", "t_obs"),
+    axis=1
+) * 100
+
+df_exp["break_prob"] = df_exp.apply(
+    lambda r: pick_metric(r, "t_brk", "break_rate", "t_obs"),
+    axis=1
+) * 100
+
+df_exp["data_source"] = df_exp.apply(
+    lambda r: "Ticker" if r["t_obs"] >= MIN_OBS else "Cross",
+    axis=1
+)
 
 # -------------------------------------------------
 # LOW SAMPLE HANDLING
@@ -624,16 +689,16 @@ def fmt_gex(v):
 
 def risk_label(row):
 
-    if row["n_obs"] < MIN_OBS:
-        return "⚠️ Low Sample"
+    if row["t_obs"] >= MIN_OBS:
+        return "✔️ Strong (Ticker)"
 
-    if row["false_stability"]:
-        return "🔥 False Stability"
+    if row["n_obs"] >= MIN_OBS:
+        return "✔️ Strong (Cross)"
 
-    if row["gex"] < 0:
-        return "⚠️ Short Gamma"
+    if row["gex"] > 0:
+        return "⚠️ Low Sample (Use GEX)"
 
-    return "Normal"
+    return "⚠️ Short Gamma"
 
 # -------------------------------------------------
 # DISPLAY
@@ -656,6 +721,7 @@ df_show = df_show[[
     "Tail Move (P90)",
     "Break Prob",
     "Risk",
+    "data_source",   # 👈 ADD THIS LINE
     "n_obs"
 ]]
 
@@ -663,7 +729,8 @@ df_show = df_show.rename(columns={
     "ticker": "Ticker",
     "description": "Name",
     "analog_regime": "Regime",
-    "n_obs": "Obs"
+    "n_obs": "Obs",
+    "data_source": "Source"   # 👈 ADD THIS
 })
 
 df_show = df_show.sort_values(by=["Risk", "GEX"], ascending=[True, False])
