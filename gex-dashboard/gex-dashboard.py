@@ -486,7 +486,7 @@ else:
     )
 
 # -------------------------------------------------
-# SECTION 4 — Expected Move + Tail Risk (FINAL FIX)
+# SECTION 4 — Expected Move + Tail Risk (FINAL CLEAN VERSION)
 # -------------------------------------------------
 
 st.markdown("## 🎯 Expected Move + Tail Risk (Analog Regimes)")
@@ -494,13 +494,23 @@ st.markdown("## 🎯 Expected Move + Tail Risk (Analog Regimes)")
 MIN_OBS = 30
 
 # -------------------------------------------------
-# 🔁 TOGGLE
+# 🔁 VIEW MODE (🔥 NEW)
 # -------------------------------------------------
 
-show_all_universe = st.toggle("Show full universe (not just portfolio)", value=False)
+view_mode = st.radio(
+    "View",
+    ["Earnings Day", "Full Universe", "Focus: INTC / DELL"],
+    horizontal=True
+)
+
+st.caption(
+    "Earnings Day = names reporting on selected date • "
+    "Full Universe = all names • "
+    "Focus = Intel + Dell deep dive"
+)
 
 # -------------------------------------------------
-# LOAD ANALOG MAP
+# LOAD ANALOG DATA
 # -------------------------------------------------
 
 @st.cache_data(ttl=300)
@@ -531,7 +541,9 @@ def load_ticker_history():
             FROM research.earnings_regimes
             WHERE realised_move_1d IS NOT NULL
         """, conn)
-        
+
+hist = load_ticker_history()
+
 # -------------------------------------------------
 # REGIME HELPERS
 # -------------------------------------------------
@@ -546,30 +558,20 @@ def classify_gex(gex):
     else:
         return "NEG"
 
-
 def build_regime(gex):
     base = classify_gex(gex)
     if base is None:
         return None
 
-    if abs(gex) > 2e7:
-        move = "MED"
-    else:
-        move = "SMALL"
-
+    move = "MED" if abs(gex) > 2e7 else "SMALL"
     return f"{base}_{move}_LOW_VOL"
-
 
 def compute_false_stability(row):
     if row["n_obs"] < MIN_OBS:
         return False
-
     return (row["gex"] > 0) and (row["break_rate"] > 0.3)
 
-hist = load_ticker_history()
-
 def compute_ticker_stats(row):
-
     if pd.isna(row["analog_regime"]):
         return pd.Series([None, None, None, 0])
 
@@ -578,42 +580,56 @@ def compute_ticker_stats(row):
         (hist["analog_regime"] == row["analog_regime"])
     ]
 
-    n = len(sub)
-
-    if n == 0:
+    if sub.empty:
         return pd.Series([None, None, None, 0])
 
-    avg = sub["realised_move_1d"].mean()
-    p90 = sub["realised_move_1d"].quantile(0.9)
-    brk = (sub["realised_move_1d"] > 0.03).mean()
+    return pd.Series([
+        sub["realised_move_1d"].mean(),
+        sub["realised_move_1d"].quantile(0.9),
+        (sub["realised_move_1d"] > 0.03).mean(),
+        len(sub)
+    ])
 
-    return pd.Series([avg, p90, brk, n])
-    
 # -------------------------------------------------
-# 🔥 DATA SELECTION (FIXED LOGIC)
+# 🔥 DATA SELECTION (FIXED + 3 MODES)
 # -------------------------------------------------
 
-if show_all_universe:
+if view_mode == "Earnings Day":
+
+    if 'merged' not in locals() or merged.empty:
+        st.info("No earnings data available.")
+        st.stop()
+
+    df_exp = merged.copy()
+
+elif view_mode == "Full Universe":
 
     df_exp = panel.copy()
 
-    # 🔥 CRITICAL FIX — SELECT MOST RELEVANT EARNINGS EVENT
+    # 🔥 choose most relevant event per ticker
     df_exp["days_to_earnings"] = (
         pd.to_datetime(df_exp["earnings_date"]) - pd.Timestamp.today()
     ).abs()
 
     df_exp = df_exp.sort_values("days_to_earnings")
-
     df_exp = df_exp.drop_duplicates(subset=["ticker"], keep="first")
 
     df_exp["description"] = df_exp["ticker"]
 
-else:
-    if 'merged' not in locals() or merged.empty:
-        st.info("No portfolio data available.")
-        st.stop()
+elif view_mode == "Focus: INTC / DELL":
 
-    df_exp = merged.copy()
+    df_exp = panel.copy()
+
+    df_exp = df_exp[df_exp["ticker"].isin(["INTC", "DELL"])]
+
+    df_exp["days_to_earnings"] = (
+        pd.to_datetime(df_exp["earnings_date"]) - pd.Timestamp.today()
+    ).abs()
+
+    df_exp = df_exp.sort_values("days_to_earnings")
+    df_exp = df_exp.drop_duplicates(subset=["ticker"], keep="first")
+
+    df_exp["description"] = df_exp["ticker"]
 
 # -------------------------------------------------
 # ANALOG ENRICHMENT
@@ -622,6 +638,7 @@ else:
 regime_map = load_regime_map()
 
 df_exp["analog_regime"] = df_exp["gex"].apply(build_regime)
+
 df_exp[["t_avg", "t_p90", "t_brk", "t_obs"]] = df_exp.apply(
     compute_ticker_stats, axis=1
 )
@@ -629,17 +646,12 @@ df_exp[["t_avg", "t_p90", "t_brk", "t_obs"]] = df_exp.apply(
 df_exp = df_exp.merge(regime_map, on="analog_regime", how="left")
 
 # -------------------------------------------------
-# METRICS (🔥 FIXED: TICKER FIRST, THEN FALLBACK)
+# METRICS (🔥 TICKER FIRST)
 # -------------------------------------------------
 
 def pick_metric(row, ticker_col, cross_col, obs_col):
-    """
-    Use ticker-specific stats if enough observations,
-    otherwise fall back to cross-sectional regime stats
-    """
     if row[obs_col] >= MIN_OBS:
         return row[ticker_col]
-
     return row[cross_col]
 
 df_exp["expected_move"] = df_exp.apply(
@@ -663,20 +675,13 @@ df_exp["data_source"] = df_exp.apply(
 )
 
 # -------------------------------------------------
-# LOW SAMPLE HANDLING
-# -------------------------------------------------
-
-low_sample_mask = df_exp["n_obs"] < MIN_OBS
-df_exp.loc[low_sample_mask, ["expected_move", "tail_move", "break_prob"]] = None
-
-# -------------------------------------------------
 # FLAGS
 # -------------------------------------------------
 
 df_exp["false_stability"] = df_exp.apply(compute_false_stability, axis=1)
 
 # -------------------------------------------------
-# FORMATTERS
+# FORMAT
 # -------------------------------------------------
 
 def fmt_pct(v):
@@ -688,17 +693,13 @@ def fmt_gex(v):
     return f"{'-' if v < 0 else '+'}${abs(v)/1e6:,.1f}M"
 
 def risk_label(row):
-
     if row["t_obs"] >= MIN_OBS:
         return "✔️ Strong (Ticker)"
-
     if row["n_obs"] >= MIN_OBS:
         return "✔️ Strong (Cross)"
-
-    if row["gex"] > 0:
-        return "⚠️ Low Sample (Use GEX)"
-
-    return "⚠️ Short Gamma"
+    if row["gex"] < 0:
+        return "⚠️ Short Gamma"
+    return "⚠️ Low Sample"
 
 # -------------------------------------------------
 # DISPLAY
@@ -721,7 +722,7 @@ df_show = df_show[[
     "Tail Move (P90)",
     "Break Prob",
     "Risk",
-    "data_source",   # 👈 ADD THIS LINE
+    "data_source",
     "n_obs"
 ]]
 
@@ -730,7 +731,7 @@ df_show = df_show.rename(columns={
     "description": "Name",
     "analog_regime": "Regime",
     "n_obs": "Obs",
-    "data_source": "Source"   # 👈 ADD THIS
+    "data_source": "Source"
 })
 
 df_show = df_show.sort_values(by=["Risk", "GEX"], ascending=[True, False])
