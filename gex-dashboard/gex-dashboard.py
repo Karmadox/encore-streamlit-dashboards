@@ -308,62 +308,101 @@ This dashboard helps answer:
 
 This section answers:
 
-> **“What happened historically in setups like this?”**
+> **“What happened historically in setups like this — and how reliable is that signal?”**
 
 Each stock is mapped to a **historical analog regime** based on:
 - Dealer positioning (**GEX**)
-- Typical move size bucket
+- A simple move/volatility bucket
 
-We then look at **all past earnings events with similar setups**.
+We then compare against **past earnings events with similar setups**.
 
-#### Key fields:
+---
 
-- **Expected Move**
+#### 🧩 Two layers of insight
+
+The model uses **two sources of history**:
+
+- **Ticker-specific (Source = Ticker)**  
+  → Same stock, same regime  
+  → **Highest quality signal**
+
+- **Cross-sectional (Source = Cross)**  
+  → Other stocks in same regime  
+  → Used when ticker history is limited
+
+---
+
+#### 📊 Key fields
+
+- **Expected Move**  
   → Average 1-day post-earnings move  
   → “What normally happens”
 
-- **Tail Move (P90)**
+- **Tail Move (P90)**  
   → 90th percentile move  
   → “What happens in stressed outcomes”
 
-- **Break Prob**
+- **Break Prob**  
   → % of times move exceeded ~3%  
   → Proxy for **event risk / convexity**
+
+- **Source**  
+  → **Ticker** = stock-specific history  
+  → **Cross** = fallback to market analogs
 
 ---
 
 #### 🚨 Risk Flags
 
-- **🔥 False Stability**
-  → Dealers are long gamma  
-  → BUT historically moves still break  
-  → *Most dangerous setup*
+- **✔️ Strong (Ticker)**  
+  → Enough stock-specific history  
+  → **Most reliable signal**
 
-- **⚠️ Short Gamma**
-  → Dealers amplify moves  
-  → Higher chance of large reactions
+- **✔️ Strong (Cross)**  
+  → Limited ticker data, but strong analog sample  
 
-- **⚠️ Low Sample**
-  → Too few historical analogs  
-  → Model is **not reliable here**
+- **⚠️ Low Sample**  
+  → Weak statistical backing  
+  → Use **GEX intuition more than history**
+
+- **⚠️ Short Gamma**  
+  → Dealer positioning may **amplify moves**
+
+- **🔥 False Stability**  
+  → Long gamma setup  
+  → BUT history shows moves still break  
 
 ---
 
 #### ⚠️ Important nuance
 
-Not all regimes are equally reliable:
+Not all signals are equal:
 
-- **High observations (100s)** → strong statistical signal  
-- **Low observations (<30)** → weak / unstable signal  
+- **Ticker + high observations** → high conviction  
+- **Cross + high observations** → medium conviction  
+- **Low observations (<30)** → low conviction  
 
-👉 In low-sample regimes:
-> Use GEX intuition more than historical averages
+👉 When data is weak:
+> Rely more on **positioning (GEX)** than historical averages
+
+---
+
+### 🔁 View Modes
+
+- **Earnings Day**  
+  → Names reporting on selected date  
+
+- **Full Universe**  
+  → All stocks with GEX data  
+
+- **Focus: INTC / DELL**  
+  → Deep-dive into key names  
 
 ---
 
 ### ⚠️ Important notes
 
-- GEX is **not a directional signal** (it doesn’t predict up vs down)
+- GEX is **not directional** (does not predict up vs down)
 - It is a **volatility / flow signal**
 - Analog regimes are **probabilistic, not predictive**
 - Best used alongside:
@@ -375,8 +414,9 @@ Not all regimes are equally reliable:
 
 ### 🧭 Rule of thumb
 
-- **Large negative GEX → expect bigger moves**
-- **Large positive GEX → expect more contained reactions**
+- **Negative GEX → expect larger moves**
+- **Positive GEX → expect more contained moves**
+- **Low sample → low confidence**
 - **False stability → beware of surprise breakouts**
 
 ---
@@ -385,7 +425,7 @@ Not all regimes are equally reliable:
 
 This dashboard shows:
 
-> **Where dealer positioning and history suggest earnings moves may be amplified, suppressed — or mispriced.**
+> **Where dealer positioning and historical analogs suggest earnings moves may be amplified, suppressed — or mispriced — and how much confidence to place in that signal.**
 """)
     
 # -------------------------------------------------
