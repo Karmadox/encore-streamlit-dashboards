@@ -550,4 +550,3 @@ st.markdown("---")
 st.caption(
     "Encore Earnings Instability Research Framework"
 )
-```
