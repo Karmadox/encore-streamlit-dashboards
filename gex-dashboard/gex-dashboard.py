@@ -585,7 +585,7 @@ def load_regime_map():
                     END
                 ) AS break_rate
             FROM research.earnings_regimes
-            WHERE realised_move_1d IS NOT NULL
+            WHERE realized_move_1d IS NOT NULL
             GROUP BY analog_regime
         """, conn)
 
