@@ -618,24 +618,6 @@ hist = load_ticker_history()
 # REGIME HELPERS
 # -------------------------------------------------
 
-def classify_gex(gex):
-    if pd.isna(gex):
-        return None
-    if gex > 3e7:
-        return "HIGH_POS"
-    elif gex > 0:
-        return "LOW_POS"
-    else:
-        return "NEG"
-
-def build_regime(gex):
-    base = classify_gex(gex)
-    if base is None:
-        return None
-
-    move = "MED" if abs(gex) > 2e7 else "SMALL"
-    return f"{base}_{move}_LOW_VOL"
-
 def compute_false_stability(row):
     if row["n_obs"] < MIN_OBS:
         return False
@@ -654,9 +636,9 @@ def compute_ticker_stats(row):
         return pd.Series([None, None, None, 0])
 
     return pd.Series([
-        sub["realised_move_1d"].mean(),
-        sub["realised_move_1d"].quantile(0.9),
-        (sub["realised_move_1d"] > 0.03).mean(),
+        sub["realized_move_1d"].mean(),
+        sub["realized_move_1d"].quantile(0.9),
+        (sub["realized_move_1d"] > 0.03).mean(),
         len(sub)
     ])
 
@@ -706,8 +688,6 @@ elif view_mode == "Focus: INTC / DELL":
 # -------------------------------------------------
 
 regime_map = load_regime_map()
-
-df_exp["analog_regime"] = df_exp["gex"].apply(build_regime)
 
 df_exp[["t_avg", "t_p90", "t_brk", "t_obs"]] = df_exp.apply(
     compute_ticker_stats, axis=1
