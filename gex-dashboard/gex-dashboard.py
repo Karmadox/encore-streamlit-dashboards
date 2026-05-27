@@ -210,6 +210,32 @@ def _format_table(df):
 
     return df.style.format(fmt)
 
+@st.cache_data(ttl=300)
+def load_regimes():
+
+    with get_conn() as conn:
+
+        df = pd.read_sql("""
+
+            SELECT
+
+                ticker,
+                earnings_date,
+
+                gamma_regime,
+                vix_regime,
+                dispersion_regime
+
+            FROM research.earnings_regimes
+
+        """, conn)
+
+    df["earnings_date"] = pd.to_datetime(
+        df["earnings_date"]
+    ).dt.date
+
+    return df
+    
 # -------------------------------------------------
 # MAIN DASHBOARD
 # -------------------------------------------------
@@ -217,6 +243,17 @@ def _format_table(df):
 st.title("📊 Dealer Gamma (GEX) Dashboard")
 
 panel = load_panel()
+
+regimes = load_regimes()
+
+panel = panel.merge(
+
+    regimes,
+
+    on=["ticker", "earnings_date"],
+
+    how="left"
+)
 
 event_dates = list_event_dates()
 
@@ -684,8 +721,21 @@ elif view_mode == "Focus: INTC / DELL":
     df_exp["description"] = df_exp["ticker"]
 
 # -------------------------------------------------
-# ANALOG ENRICHMENT
+# REAL ANALOG REGIME
 # -------------------------------------------------
+
+df_exp["analog_regime"] = (
+
+    df_exp["gamma_regime"].fillna("UNKNOWN")
+
+    + "_"
+
+    + df_exp["vix_regime"].fillna("UNKNOWN")
+
+    + "_"
+
+    + df_exp["dispersion_regime"].fillna("UNKNOWN")
+)
 
 regime_map = load_regime_map()
 
