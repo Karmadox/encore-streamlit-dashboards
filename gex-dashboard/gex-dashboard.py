@@ -563,7 +563,7 @@ else:
     )
 
 # -------------------------------------------------
-# SECTION 4 — Expected Move + Tail Risk (FINAL CLEAN VERSION)
+# SECTION 4 — Expected Move + Tail Risk
 # -------------------------------------------------
 
 st.markdown("## 🎯 Expected Move + Tail Risk (Analog Regimes)")
@@ -571,7 +571,7 @@ st.markdown("## 🎯 Expected Move + Tail Risk (Analog Regimes)")
 MIN_OBS = 30
 
 # -------------------------------------------------
-# 🔁 VIEW MODE (🔥 NEW)
+# VIEW MODE
 # -------------------------------------------------
 
 view_mode = st.radio(
@@ -587,100 +587,95 @@ st.caption(
 )
 
 # -------------------------------------------------
-# LOAD ANALOG DATA
+# LOAD REGIME ANALOG MAP
 # -------------------------------------------------
 
 @st.cache_data(ttl=300)
 def load_regime_map():
+
     with get_conn() as conn:
-        return pd.read_sql("""
+
+        df = pd.read_sql("""
+
             SELECT
+
                 concat(
-                    gamma_regime,
+                    coalesce(gamma_regime, 'UNKNOWN'),
                     '_',
-                    vix_regime,
+                    coalesce(vix_regime, 'UNKNOWN'),
                     '_',
-                    dispersion_regime
+                    coalesce(dispersion_regime, 'UNKNOWN')
                 ) as analog_regime,
-                
+
                 COUNT(*) AS n_obs,
-                
-                AVG(realized_move_1d) AS avg_move,
-                
-                STDDEV(realized_move_1d) AS vol,
-                
+
+                AVG(ABS(realized_move_1d)) AS avg_move,
+
+                STDDEV(ABS(realized_move_1d)) AS vol,
+
                 PERCENTILE_CONT(0.9)
                 WITHIN GROUP (
-                    ORDER BY realized_move_1d
+                    ORDER BY ABS(realized_move_1d)
                 ) AS p90_move,
-                
+
                 AVG(
                     CASE
-                        WHEN realized_move_1d > 0.03
+                        WHEN ABS(realized_move_1d) > 0.03
                         THEN 1
                         ELSE 0
                     END
                 ) AS break_rate
+
             FROM research.earnings_regimes
+
             WHERE realized_move_1d IS NOT NULL
+
             GROUP BY analog_regime
+
         """, conn)
+
+    return df
+
+# -------------------------------------------------
+# LOAD TICKER HISTORY
+# -------------------------------------------------
 
 @st.cache_data(ttl=300)
 def load_ticker_history():
+
     with get_conn() as conn:
-        return pd.read_sql("""
+
+        df = pd.read_sql("""
+
             SELECT
+
                 ticker,
+
                 earnings_date,
-            
+
                 concat(
-                    gamma_regime,
+                    coalesce(gamma_regime, 'UNKNOWN'),
                     '_',
-                    vix_regime,
+                    coalesce(vix_regime, 'UNKNOWN'),
                     '_',
-                    dispersion_regime
+                    coalesce(dispersion_regime, 'UNKNOWN')
                 ) as analog_regime,
-            
-                realized_move_1d
-            
+
+                ABS(realized_move_1d) AS realized_move_1d
+
             FROM research.earnings_regimes
-            
+
             WHERE realized_move_1d IS NOT NULL
+
         """, conn)
 
+    return df
+
 hist = load_ticker_history()
+regime_map = load_regime_map()
 
 # -------------------------------------------------
-# REGIME HELPERS
-# -------------------------------------------------
-
-def compute_false_stability(row):
-    if row["n_obs"] < MIN_OBS:
-        return False
-    return (row["gex"] > 0) and (row["break_rate"] > 0.3)
-
-def compute_ticker_stats(row):
-    if pd.isna(row["analog_regime"]):
-        return pd.Series([None, None, None, 0])
-
-    sub = hist[
-        (hist["ticker"] == row["ticker"]) &
-        (hist["analog_regime"] == row["analog_regime"])
-    ]
-
-    if sub.empty:
-        return pd.Series([None, None, None, 0])
-
-    return pd.Series([
-        sub["realized_move_1d"].mean(),
-        sub["realized_move_1d"].quantile(0.9),
-        (sub["realized_move_1d"] > 0.03).mean(),
-        len(sub)
-    ])
-
-# -------------------------------------------------
-# 🔥 DATA SELECTION (FIXED + 3 MODES)
+# DATA SELECTION
 # -------------------------------------------------
 
 if view_mode == "Earnings Day":
@@ -695,123 +690,286 @@ elif view_mode == "Full Universe":
 
     df_exp = panel.copy()
 
-    # 🔥 choose most relevant event per ticker
     df_exp["days_to_earnings"] = (
-        pd.to_datetime(df_exp["earnings_date"]) - pd.Timestamp.today()
+        pd.to_datetime(df_exp["earnings_date"])
+        - pd.Timestamp.today()
     ).abs()
 
-    df_exp = df_exp.sort_values("days_to_earnings")
-    df_exp = df_exp.drop_duplicates(subset=["ticker"], keep="first")
+    df_exp = (
+        df_exp
+        .sort_values("days_to_earnings")
+        .drop_duplicates(subset=["ticker"], keep="first")
+    )
 
     df_exp["description"] = df_exp["ticker"]
 
-elif view_mode == "Focus: INTC / DELL":
+else:
 
     df_exp = panel.copy()
 
-    df_exp = df_exp[df_exp["ticker"].isin(["INTC", "DELL"])]
+    df_exp = df_exp[
+        df_exp["ticker"].isin(["INTC", "DELL"])
+    ]
 
     df_exp["days_to_earnings"] = (
-        pd.to_datetime(df_exp["earnings_date"]) - pd.Timestamp.today()
+        pd.to_datetime(df_exp["earnings_date"])
+        - pd.Timestamp.today()
     ).abs()
 
-    df_exp = df_exp.sort_values("days_to_earnings")
-    df_exp = df_exp.drop_duplicates(subset=["ticker"], keep="first")
+    df_exp = (
+        df_exp
+        .sort_values("days_to_earnings")
+        .drop_duplicates(subset=["ticker"], keep="first")
+    )
 
     df_exp["description"] = df_exp["ticker"]
 
 # -------------------------------------------------
-# REAL ANALOG REGIME
+# HARDEN REGIME COLUMNS
+# -------------------------------------------------
+
+for col in [
+    "gamma_regime",
+    "vix_regime",
+    "dispersion_regime"
+]:
+
+    if col not in df_exp.columns:
+        df_exp[col] = "UNKNOWN"
+
+    df_exp[col] = (
+        df_exp[col]
+        .fillna("UNKNOWN")
+        .astype(str)
+    )
+
+# -------------------------------------------------
+# BUILD ANALOG REGIME
 # -------------------------------------------------
 
 df_exp["analog_regime"] = (
 
-    df_exp["gamma_regime"].fillna("UNKNOWN")
+    df_exp["gamma_regime"]
 
     + "_"
 
-    + df_exp["vix_regime"].fillna("UNKNOWN")
+    + df_exp["vix_regime"]
 
     + "_"
 
-    + df_exp["dispersion_regime"].fillna("UNKNOWN")
+    + df_exp["dispersion_regime"]
 )
 
-regime_map = load_regime_map()
+# -------------------------------------------------
+# TICKER ANALOG STATS
+# -------------------------------------------------
 
-df_exp[["t_avg", "t_p90", "t_brk", "t_obs"]] = df_exp.apply(
-    compute_ticker_stats, axis=1
+def compute_ticker_stats(row):
+
+    sub = hist[
+        (hist["ticker"] == row["ticker"]) &
+        (hist["analog_regime"] == row["analog_regime"])
+    ]
+
+    if sub.empty:
+
+        return pd.Series([
+            None,
+            None,
+            None,
+            0
+        ])
+
+    return pd.Series([
+
+        sub["realized_move_1d"].mean(),
+
+        sub["realized_move_1d"].quantile(0.9),
+
+        (
+            sub["realized_move_1d"] > 0.03
+        ).mean(),
+
+        len(sub)
+
+    ])
+
+df_exp[[
+    "t_avg",
+    "t_p90",
+    "t_brk",
+    "t_obs"
+]] = df_exp.apply(
+    compute_ticker_stats,
+    axis=1
 )
 
-df_exp = df_exp.merge(regime_map, on="analog_regime", how="left")
-
 # -------------------------------------------------
-# METRICS (🔥 TICKER FIRST)
+# MERGE CROSS-SECTIONAL ANALOGS
 # -------------------------------------------------
 
-def pick_metric(row, ticker_col, cross_col, obs_col):
+df_exp = df_exp.merge(
+    regime_map,
+    on="analog_regime",
+    how="left"
+)
+
+# -------------------------------------------------
+# METRIC PICKER
+# -------------------------------------------------
+
+def pick_metric(
+    row,
+    ticker_col,
+    cross_col,
+    obs_col
+):
+
     if row[obs_col] >= MIN_OBS:
         return row[ticker_col]
+
     return row[cross_col]
 
-df_exp["expected_move"] = df_exp.apply(
-    lambda r: pick_metric(r, "t_avg", "avg_move", "t_obs"),
-    axis=1
-) * 100
+# -------------------------------------------------
+# FINAL METRICS
+# -------------------------------------------------
 
-df_exp["tail_move"] = df_exp.apply(
-    lambda r: pick_metric(r, "t_p90", "p90_move", "t_obs"),
-    axis=1
-) * 100
+df_exp["expected_move"] = (
 
-df_exp["break_prob"] = df_exp.apply(
-    lambda r: pick_metric(r, "t_brk", "break_rate", "t_obs"),
-    axis=1
-) * 100
+    df_exp.apply(
+
+        lambda r: pick_metric(
+            r,
+            "t_avg",
+            "avg_move",
+            "t_obs"
+        ),
+
+        axis=1
+    )
+
+    * 100
+)
+
+df_exp["tail_move"] = (
+
+    df_exp.apply(
+
+        lambda r: pick_metric(
+            r,
+            "t_p90",
+            "p90_move",
+            "t_obs"
+        ),
+
+        axis=1
+    )
+
+    * 100
+)
+
+df_exp["break_prob"] = (
+
+    df_exp.apply(
+
+        lambda r: pick_metric(
+            r,
+            "t_brk",
+            "break_rate",
+            "t_obs"
+        ),
+
+        axis=1
+    )
+
+    * 100
+)
 
 df_exp["data_source"] = df_exp.apply(
-    lambda r: "Ticker" if r["t_obs"] >= MIN_OBS else "Cross",
+
+    lambda r:
+
+        "Ticker"
+
+        if r["t_obs"] >= MIN_OBS
+
+        else "Cross",
+
     axis=1
 )
 
 # -------------------------------------------------
-# FLAGS
+# FALSE STABILITY
 # -------------------------------------------------
 
-df_exp["false_stability"] = df_exp.apply(compute_false_stability, axis=1)
+df_exp["false_stability"] = (
+
+    (df_exp["gex"] > 0)
+
+    &
+
+    (df_exp["break_prob"] > 30)
+
+)
 
 # -------------------------------------------------
-# FORMAT
+# FORMATTERS
 # -------------------------------------------------
 
 def fmt_pct(v):
-    return f"{v:.1f}%" if pd.notna(v) else "—"
 
-def fmt_gex(v):
     if pd.isna(v):
         return "—"
+
+    return f"{v:.1f}%"
+
+def fmt_gex(v):
+
+    if pd.isna(v):
+        return "—"
+
     return f"{'-' if v < 0 else '+'}${abs(v)/1e6:,.1f}M"
 
 def risk_label(row):
+
     if row["t_obs"] >= MIN_OBS:
         return "✔️ Strong (Ticker)"
+
     if row["n_obs"] >= MIN_OBS:
         return "✔️ Strong (Cross)"
+
     if row["gex"] < 0:
         return "⚠️ Short Gamma"
+
     return "⚠️ Low Sample"
 
 # -------------------------------------------------
-# DISPLAY
+# DISPLAY TABLE
 # -------------------------------------------------
 
 df_show = df_exp.copy()
 
 df_show["GEX"] = df_show["gex"].apply(fmt_gex)
-df_show["Expected Move"] = df_show["expected_move"].apply(fmt_pct)
-df_show["Tail Move (P90)"] = df_show["tail_move"].apply(fmt_pct)
-df_show["Break Prob"] = df_show["break_prob"].apply(fmt_pct)
-df_show["Risk"] = df_show.apply(risk_label, axis=1)
+
+df_show["Expected Move"] = (
+    df_show["expected_move"]
+    .apply(fmt_pct)
+)
+
+df_show["Tail Move (P90)"] = (
+    df_show["tail_move"]
+    .apply(fmt_pct)
+)
+
+df_show["Break Prob"] = (
+    df_show["break_prob"]
+    .apply(fmt_pct)
+)
+
+df_show["Risk"] = df_show.apply(
+    risk_label,
+    axis=1
+)
 
 df_show = df_show[[
     "ticker",
@@ -827,16 +985,41 @@ df_show = df_show[[
 ]]
 
 df_show = df_show.rename(columns={
+
     "ticker": "Ticker",
+
     "description": "Name",
+
     "analog_regime": "Regime",
+
     "n_obs": "Obs",
+
     "data_source": "Source"
+
 })
 
-df_show = df_show.sort_values(by=["Risk", "GEX"], ascending=[True, False])
+# -------------------------------------------------
+# SAFE SORT
+# -------------------------------------------------
 
-st.dataframe(df_show, use_container_width=True)
+if "Obs" in df_show.columns:
+
+    df_show = df_show.sort_values(
+        by="Obs",
+        ascending=False
+    )
+
+# -------------------------------------------------
+# RENDER
+# -------------------------------------------------
+
+st.dataframe(
+    df_show,
+    use_container_width=True
+)
 
 st.divider()
-st.caption("Data: Databento + Bloomberg via Postgres pipeline.")
+
+st.caption(
+    "Data: Databento + Bloomberg via Postgres pipeline."
+)
