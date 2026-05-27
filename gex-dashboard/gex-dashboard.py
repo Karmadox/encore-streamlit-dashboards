@@ -558,12 +558,32 @@ def load_regime_map():
     with get_conn() as conn:
         return pd.read_sql("""
             SELECT
-                analog_regime,
+                concat(
+                    gamma_regime,
+                    '_',
+                    vix_regime,
+                    '_',
+                    dispersion_regime
+                ) as analog_regime,
+                
                 COUNT(*) AS n_obs,
-                AVG(realised_move_1d) AS avg_move,
-                STDDEV(realised_move_1d) AS vol,
-                PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY realised_move_1d) AS p90_move,
-                AVG(CASE WHEN realised_move_1d > 0.03 THEN 1 ELSE 0 END) AS break_rate
+                
+                AVG(realized_move_1d) AS avg_move,
+                
+                STDDEV(realized_move_1d) AS vol,
+                
+                PERCENTILE_CONT(0.9)
+                WITHIN GROUP (
+                    ORDER BY realized_move_1d
+                ) AS p90_move,
+                
+                AVG(
+                    CASE
+                        WHEN realized_move_1d > 0.03
+                        THEN 1
+                        ELSE 0
+                    END
+                ) AS break_rate
             FROM research.earnings_regimes
             WHERE realised_move_1d IS NOT NULL
             GROUP BY analog_regime
@@ -576,10 +596,20 @@ def load_ticker_history():
             SELECT
                 ticker,
                 earnings_date,
-                analog_regime,
-                realised_move_1d
+            
+                concat(
+                    gamma_regime,
+                    '_',
+                    vix_regime,
+                    '_',
+                    dispersion_regime
+                ) as analog_regime,
+            
+                realized_move_1d
+            
             FROM research.earnings_regimes
-            WHERE realised_move_1d IS NOT NULL
+            
+            WHERE realized_move_1d IS NOT NULL
         """, conn)
 
 hist = load_ticker_history()
