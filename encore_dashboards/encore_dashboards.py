@@ -410,6 +410,38 @@ with col10:
         """,
         unsafe_allow_html=True,
     )
+
+with col11:
+    st.markdown(
+        """
+        <div class="dashboard-card">
+            <div class="dashboard-title">
+                ⚠️ Earnings Expectation Dislocation
+            </div>
+
+            <div class="dashboard-subtitle">
+                Institutional framework for analyzing implied vs realized
+                earnings convexity, expectation failures, and regime-dependent
+                post-earnings instability.
+            </div>
+
+            <ul class="dashboard-list">
+                <li>Implied vs realized earnings move analysis</li>
+                <li>Expectation failure detection and instability ratios</li>
+                <li>Regime-aware earnings convexity mapping</li>
+                <li>Short gamma and volatility regime diagnostics</li>
+                <li>Temporal clustering of earnings dislocations</li>
+            </ul>
+
+            <div class="dashboard-link">
+                👉 <a href="https://encore-earnings-instability-dashboard.streamlit.app/" target="_blank">
+                    Open Earnings Instability Dashboard
+                </a>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     
 # -------------------------------------------------
 # FOOTER
