@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import psycopg2
-import plotly.express as px
+import plotly.express 
 import plotly.graph_objects as go
 
 # =========================================================
@@ -341,8 +341,18 @@ with st.expander(
 # KPI METRICS
 # =========================================================
 
-intc_df = df[df["ticker"] == "INTC"]
-dell_df = df[df["ticker"] == "DELL"]
+recent_df = df[
+    pd.to_datetime(df["earnings_date"])
+    >= pd.Timestamp("2024-01-01")
+]
+
+intc_df = recent_df[
+    recent_df["ticker"] == "INTC"
+]
+
+dell_df = recent_df[
+    recent_df["ticker"] == "DELL"
+]
 
 intc_ratio = round(
     intc_df["implied_vs_realized_ratio"].mean(),
