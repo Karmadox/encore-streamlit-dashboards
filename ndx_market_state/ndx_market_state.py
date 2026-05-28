@@ -494,11 +494,26 @@ semi_return = (
 
 )
 
-other_return = (
+other_weights = everything_else["total_weight"].sum()
 
-    everything_else["weighted_ytd_return"].mean()
+if other_weights > 0:
 
-)
+    other_return = (
+
+        (
+            everything_else["weighted_ytd_return"]
+
+            * everything_else["total_weight"]
+
+        ).sum()
+
+        / other_weights
+
+    )
+
+else:
+
+    other_return = 0
 
 # ---------------------------------------------
 # KPI Cards
