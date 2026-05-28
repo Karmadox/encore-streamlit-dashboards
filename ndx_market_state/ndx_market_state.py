@@ -588,78 +588,118 @@ st.dataframe(
 
 st.subheader("📊 Cohort TRP Tension (Overlay Adjusted)")
 
-cohort_trp_rows = []
+if trp_df.empty:
 
-for cohort in sorted(
+    st.warning(
 
-    trp_df["cohort_name"].dropna().unique()
-
-):
-
-    cohort_df = trp_df[
-
-        trp_df["cohort_name"] == cohort
-
-    ]
-
-    gross_exposure = (
-
-        cohort_df["net_position_value"]
-
-        .abs()
-
-        .sum()
+        "No TRP cohort data available."
 
     )
 
-    if gross_exposure > 0:
+else:
 
-        weighted_trp = (
+    if "cohort_name" not in trp_df.columns:
 
-            (
-                cohort_df["net_position_value"]
+        st.error(
 
-                * cohort_df["pct_to_best_target"]
-
-            ).sum()
-
-            / gross_exposure
+            "Missing cohort_name column in TRP dataset."
 
         )
 
     else:
 
-        weighted_trp = 0
+        cohort_trp_rows = []
 
-    cohort_trp_rows.append({
+        valid_cohorts = (
 
-        "cohort_name": cohort,
+            trp_df["cohort_name"]
 
-        "weighted_trp": weighted_trp
+            .dropna()
 
-    })
+            .unique()
 
-cohort_trp = pd.DataFrame(cohort_trp_rows)
+        )
 
-cohort_trp = cohort_trp.sort_values(
+        for cohort in sorted(valid_cohorts):
 
-    "weighted_trp",
+            cohort_df = trp_df[
 
-    ascending=False
+                trp_df["cohort_name"] == cohort
 
-)
+            ]
 
-st.dataframe(
+            gross_exposure = (
 
-    cohort_trp.style.format({
+                cohort_df["net_position_value"]
 
-        "weighted_trp": "{:.2f}%"
+                .abs()
 
-    }),
+                .sum()
 
-    use_container_width=True
+            )
 
-)
+            if gross_exposure > 0:
+
+                weighted_trp = (
+
+                    (
+                        cohort_df["net_position_value"]
+
+                        * cohort_df["pct_to_best_target"]
+
+                    ).sum()
+
+                    / gross_exposure
+
+                )
+
+            else:
+
+                weighted_trp = 0
+
+            cohort_trp_rows.append({
+
+                "cohort_name": cohort,
+
+                "weighted_trp": weighted_trp
+
+            })
+
+        if len(cohort_trp_rows) == 0:
+
+            st.warning(
+
+                "No valid cohort TRP rows calculated."
+
+            )
+
+        else:
+
+            cohort_trp = pd.DataFrame(
+
+                cohort_trp_rows
+
+            )
+
+            cohort_trp = cohort_trp.sort_values(
+
+                "weighted_trp",
+
+                ascending=False
+
+            )
+
+            st.dataframe(
+
+                cohort_trp.style.format({
+
+                    "weighted_trp": "{:.2f}%"
+
+                }),
+
+                use_container_width=True
+
+            )
 
 # --------------------------------------------------
 # FOOTER
