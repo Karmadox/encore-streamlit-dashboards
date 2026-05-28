@@ -90,11 +90,11 @@ def load_official_ndx_ytd():
 
         SELECT
 
-            pct_change_ytd
+            pct_ytd
 
-        FROM encoredb.index_market_snapshot
+        FROM encoredb.index_performance_snapshot
 
-        WHERE index_name = 'NDX'
+        WHERE security = 'NDX Index'
 
         ORDER BY snapshot_date DESC
 
@@ -107,9 +107,13 @@ def load_official_ndx_ytd():
         df = pd.read_sql(sql, conn)
 
     return (
-        df["pct_change_ytd"].iloc[0]
+
+        df["pct_ytd"].iloc[0]
+
         if not df.empty
+
         else None
+
     )
     
 # --------------------------------------------------
