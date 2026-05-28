@@ -44,7 +44,7 @@ def get_conn():
 
 @st.cache_data(ttl=300)
 def load_latest_snapshot_date():
-    sql = "SELECT MAX(snapshot_date) FROM encoredb.index_market_snapshot WHERE index_name = 'NDX'"
+    sql = "SELECT MAX(snapshot_date) FROM encoredb.ndx_market_snapshot"
     with get_conn() as conn:
         return pd.read_sql(sql, conn).iloc[0, 0]
 
