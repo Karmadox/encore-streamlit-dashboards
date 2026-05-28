@@ -83,6 +83,35 @@ def load_nq_index_level():
         df = pd.read_sql(sql, conn)
         return None if df.empty else df["close"].iloc[0]
 
+@st.cache_data(ttl=300)
+def load_official_ndx_ytd():
+
+    sql = """
+
+        SELECT
+
+            pct_change_ytd
+
+        FROM encoredb.index_market_snapshot
+
+        WHERE index_name = 'NDX'
+
+        ORDER BY snapshot_date DESC
+
+        LIMIT 1
+
+    """
+
+    with get_conn() as conn:
+
+        df = pd.read_sql(sql, conn)
+
+    return (
+        df["pct_change_ytd"].iloc[0]
+        if not df.empty
+        else None
+    )
+    
 # --------------------------------------------------
 # LOAD DATA
 # --------------------------------------------------
@@ -91,6 +120,7 @@ snapshot_date = load_latest_snapshot_date()
 df = load_market_state(snapshot_date)
 positions = load_positions()
 nq_index_level = load_nq_index_level()
+official_ndx_ytd = load_official_ndx_ytd()
 
 # --------------------------------------------------
 # MERGE REAL POSITIONS
@@ -396,19 +426,11 @@ other_return = (
     everything_else["weighted_ytd_return"].mean()
 )
 
-ndx_return = (
-    (
-        filtered["pct_change_ytd"]
-        * filtered["index_weight_pct"]
-    ).sum()
-    / filtered["index_weight_pct"].sum()
-)
-
 c1,c2,c3 = st.columns(3)
 
 c1.metric(
     "Nasdaq-100 YTD",
-    f"{ndx_return:.1f}%"
+    f"{official_ndx_ytd:.1f}%"
 )
 
 c2.metric(
