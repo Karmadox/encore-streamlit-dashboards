@@ -174,6 +174,170 @@ st.caption(
 st.markdown("---")
 
 # =========================================================
+# HOW TO READ THIS DASHBOARD
+# =========================================================
+
+with st.expander(
+    "How to Read This Dashboard",
+    expanded=True
+):
+
+    st.markdown("""
+
+    ### Framework Objective
+
+    This dashboard measures whether the options market
+    correctly priced earnings risk.
+
+    The core framework compares:
+
+    - **Implied Move**
+      → the move expected by the options market before earnings
+
+    versus
+
+    - **Realized Move**
+      → the actual post-earnings stock move
+
+    ---
+
+    ### Core Interpretation
+
+    #### Implied vs Realized Ratio
+
+    ```text
+    Ratio > 1.0
+    ```
+
+    Means:
+
+    - realized volatility exceeded expectations
+    - earnings risk was underpriced
+    - the market was surprised
+
+    Higher values indicate larger expectation failures.
+
+    ---
+
+    #### Ratio < 1.0
+
+    Means:
+
+    - implied volatility overpriced the event
+    - realized volatility was muted
+    - options implied too much risk
+
+    ---
+
+    ### Expectation Failure
+
+    An earnings event is classified as an
+    **Expectation Failure** when:
+
+    ```text
+    Realized Move > Implied Move
+    ```
+
+    These are the events most relevant for:
+
+    - volatility dislocations
+    - post-earnings repricing
+    - convexity opportunities
+    - short gamma stress
+
+    ---
+
+    ### Regime Definitions
+
+    #### Gamma Regime
+
+    Measures dealer positioning dynamics.
+
+    - **LONG_GAMMA**
+      → dealer positioning dampens volatility
+
+    - **SHORT_GAMMA**
+      → dealer positioning amplifies volatility
+
+    Historically, short gamma environments
+    produce larger earnings dislocations.
+
+    ---
+
+    #### VIX Regime
+
+    Market volatility state.
+
+    - LOW_VOL
+    - NORMAL_VOL
+    - HIGH_VOL
+
+    Higher volatility regimes often produce
+    larger realized earnings moves.
+
+    ---
+
+    #### Dispersion Regime
+
+    Measures cross-sectional earnings volatility.
+
+    - LOW_DISPERSION
+    - NORMAL_DISPERSION
+    - HIGH_DISPERSION
+
+    High dispersion environments indicate
+    elevated single-stock instability.
+
+    ---
+
+    ### Scatter Plot
+
+    The diagonal line represents:
+
+    ```text
+    perfect earnings pricing
+    ```
+
+    Points ABOVE the line:
+
+    - realized volatility exceeded implied volatility
+    - risk was underpriced
+
+    Points BELOW the line:
+
+    - implied volatility overpriced realized risk
+
+    ---
+
+    ### Regime Heatmap
+
+    Displays average instability ratios
+    across volatility regimes.
+
+    Higher values indicate environments where:
+
+    - earnings pricing repeatedly failed
+    - realized volatility exceeded expectations
+
+    ---
+
+    ### Analog Regime Engine
+
+    The Analog Engine groups historical earnings events
+    by similar volatility conditions.
+
+    It helps identify:
+
+    - historical analogs
+    - recurring instability environments
+    - regime-dependent earnings behavior
+
+    This is intended as a volatility
+    and risk-framing tool rather than a prediction engine.
+
+    """)
+    
+# =========================================================
 # KPI METRICS
 # =========================================================
 
