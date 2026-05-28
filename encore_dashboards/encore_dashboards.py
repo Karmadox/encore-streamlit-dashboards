@@ -412,9 +412,11 @@ with col10:
     )
 
 with col11:
+
     st.markdown(
         """
         <div class="dashboard-card">
+
             <div class="dashboard-title">
                 ⚠️ Earnings Expectation Dislocation
             </div>
@@ -438,6 +440,7 @@ with col11:
                     Open Earnings Instability Dashboard
                 </a>
             </div>
+
         </div>
         """,
         unsafe_allow_html=True,
