@@ -351,44 +351,102 @@ perf_summary = (
 
     filtered.groupby("cohort_name", dropna=False)
 
-    .apply(
+    .agg(
 
-        lambda x: pd.Series({
+        avg_ytd_return=(
 
-            "avg_ytd_return":
+            "pct_change_ytd",
 
-                x["pct_change_ytd"].mean(),
+            "mean"
 
-            "weighted_ytd_return":
+        ),
 
-                (
-                    x["pct_change_ytd"]
-                    * x["index_weight_pct"]
-                ).sum()
+        total_weight=(
 
-                / x["index_weight_pct"].sum(),
+            "index_weight_pct",
 
-            "index_contribution":
+            "sum"
 
-                (
-                    x["pct_change_ytd"]
-                    * x["index_weight_pct"]
-                ).sum() / 100
-
-        })
+        )
 
     )
 
     .reset_index()
 
-    .sort_values(
-        "index_contribution",
-        ascending=False
-    )
+)
+
+# ---------------------------------------------
+# Weighted YTD Return
+# ---------------------------------------------
+
+weighted_returns = []
+
+index_contributions = []
+
+for cohort in perf_summary["cohort_name"]:
+
+    cohort_df = filtered[
+        filtered["cohort_name"] == cohort
+    ]
+
+    total_weight = cohort_df[
+        "index_weight_pct"
+    ].sum()
+
+    if total_weight > 0:
+
+        weighted_return = (
+
+            (
+                cohort_df["pct_change_ytd"]
+                * cohort_df["index_weight_pct"]
+            ).sum()
+
+            / total_weight
+
+        )
+
+        contribution = (
+
+            (
+                cohort_df["pct_change_ytd"]
+                * cohort_df["index_weight_pct"]
+            ).sum()
+
+            / 100
+
+        )
+
+    else:
+
+        weighted_return = None
+        contribution = None
+
+    weighted_returns.append(weighted_return)
+
+    index_contributions.append(contribution)
+
+perf_summary["weighted_ytd_return"] = weighted_returns
+
+perf_summary["index_contribution"] = index_contributions
+
+# ---------------------------------------------
+# Sort
+# ---------------------------------------------
+
+perf_summary = perf_summary.sort_values(
+
+    "index_contribution",
+
+    ascending=False
 
 )
 
 perf_summary = perf_summary.reset_index(drop=True)
+
+# ---------------------------------------------
+# Display
+# ---------------------------------------------
 
 st.dataframe(
 
@@ -398,13 +456,19 @@ st.dataframe(
 
         "weighted_ytd_return": "{:.2f}%",
 
-        "index_contribution": "{:.2f}%"
+        "index_contribution": "{:.2f}%",
+
+        "total_weight": "{:.2f}%"
 
     }),
 
     use_container_width=True
 
 )
+
+# ---------------------------------------------
+# Semiconductor vs Rest
+# ---------------------------------------------
 
 semis = perf_summary[
     perf_summary["cohort_name"]
@@ -417,30 +481,49 @@ everything_else = perf_summary[
 ]
 
 semi_return = (
+
     semis["weighted_ytd_return"].iloc[0]
+
     if not semis.empty
+
     else 0
+
 )
 
 other_return = (
+
     everything_else["weighted_ytd_return"].mean()
+
 )
 
-c1,c2,c3 = st.columns(3)
+# ---------------------------------------------
+# KPI Cards
+# ---------------------------------------------
+
+c1, c2, c3 = st.columns(3)
 
 c1.metric(
+
     "Nasdaq-100 YTD",
+
     f"{official_ndx_ytd:.1f}%"
+
 )
 
 c2.metric(
+
     "Semis YTD",
+
     f"{semi_return:.1f}%"
+
 )
 
 c3.metric(
+
     "Everything Else YTD",
+
     f"{other_return:.1f}%"
+
 )
 
 # --------------------------------------------------
