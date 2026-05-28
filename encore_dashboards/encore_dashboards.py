@@ -445,6 +445,32 @@ with col11:
         """,
         unsafe_allow_html=True,
     )
+
+with col12:
+
+    st.markdown(
+        """
+        <div class="dashboard-card">
+
+            <div class="dashboard-title">
+                🚧 Future Analytics
+            </div>
+
+            <div class="dashboard-subtitle">
+                Upcoming institutional analytics and market structure frameworks.
+            </div>
+
+            <ul class="dashboard-list">
+                <li>Cross-sectional earnings instability</li>
+                <li>Dealer convexity stress mapping</li>
+                <li>Macro regime forecasting</li>
+                <li>Portfolio-level event risk clustering</li>
+            </ul>
+
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     
 # -------------------------------------------------
 # FOOTER
