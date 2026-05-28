@@ -358,6 +358,8 @@ perf_summary = (
 
 )
 
+perf_summary = perf_summary.reset_index(drop=True)
+
 st.dataframe(
 
     perf_summary.style.format({
