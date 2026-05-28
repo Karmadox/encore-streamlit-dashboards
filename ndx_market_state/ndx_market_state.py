@@ -53,7 +53,7 @@ def load_market_state(snapshot_date):
     sql = """
         SELECT *
         FROM encoredb.v_index_canonical_market_state_enriched
-        WHERE index_name = 'NDX'
+        WHERE index_name = 'NASDAQ100'
         AND snapshot_date = %s
         ORDER BY index_rank
     """
