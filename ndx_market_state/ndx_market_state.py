@@ -311,6 +311,115 @@ c2.metric("Synthetic (Selected)", f"{filtered['synthetic_value'].sum():,.0f}")
 c3.metric("Net (Selected)", f"{filtered['net_position_value'].sum():,.0f}")
 
 # --------------------------------------------------
+# YTD PERFORMANCE DECOMPOSITION
+# --------------------------------------------------
+
+st.divider()
+st.subheader("📈 Nasdaq YTD Performance Decomposition")
+
+perf_summary = (
+
+    filtered.groupby("cohort_name", dropna=False)
+
+    .apply(
+
+        lambda x: pd.Series({
+
+            "avg_ytd_return":
+
+                x["pct_change_ytd"].mean(),
+
+            "weighted_ytd_return":
+
+                (
+                    x["pct_change_ytd"]
+                    * x["index_weight_pct"]
+                ).sum()
+
+                / x["index_weight_pct"].sum(),
+
+            "index_contribution":
+
+                (
+                    x["pct_change_ytd"]
+                    * x["index_weight_pct"]
+                ).sum() / 100
+
+        })
+
+    )
+
+    .reset_index()
+
+    .sort_values(
+        "index_contribution",
+        ascending=False
+    )
+
+)
+
+st.dataframe(
+
+    perf_summary.style.format({
+
+        "avg_ytd_return": "{:.2f}%",
+
+        "weighted_ytd_return": "{:.2f}%",
+
+        "index_contribution": "{:.2f}%"
+
+    }),
+
+    use_container_width=True
+
+)
+
+semis = perf_summary[
+    perf_summary["cohort_name"]
+    == "Semiconductors"
+]
+
+everything_else = perf_summary[
+    perf_summary["cohort_name"]
+    != "Semiconductors"
+]
+
+semi_return = (
+    semis["weighted_ytd_return"].iloc[0]
+    if not semis.empty
+    else 0
+)
+
+other_return = (
+    everything_else["weighted_ytd_return"].mean()
+)
+
+ndx_return = (
+    (
+        filtered["pct_change_ytd"]
+        * filtered["index_weight_pct"]
+    ).sum()
+    / filtered["index_weight_pct"].sum()
+)
+
+c1,c2,c3 = st.columns(3)
+
+c1.metric(
+    "Nasdaq-100 YTD",
+    f"{ndx_return:.1f}%"
+)
+
+c2.metric(
+    "Semis YTD",
+    f"{semi_return:.1f}%"
+)
+
+c3.metric(
+    "Everything Else YTD",
+    f"{other_return:.1f}%"
+)
+
+# --------------------------------------------------
 # ROLE SUMMARY
 # --------------------------------------------------
 
