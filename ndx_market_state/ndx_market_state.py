@@ -586,33 +586,60 @@ st.dataframe(
 # COHORT TRP TENSION
 # --------------------------------------------------
 
-cohort_trp = (
-    trp_df.groupby("cohort_name")
-    .apply(
-        lambda x: (
+st.subheader("📊 Cohort TRP Tension (Overlay Adjusted)")
+
+cohort_trp_rows = []
+
+for cohort in sorted(
+
+    trp_df["cohort_name"].dropna().unique()
+
+):
+
+    cohort_df = trp_df[
+
+        trp_df["cohort_name"] == cohort
+
+    ]
+
+    gross_exposure = (
+
+        cohort_df["net_position_value"]
+
+        .abs()
+
+        .sum()
+
+    )
+
+    if gross_exposure > 0:
+
+        weighted_trp = (
+
             (
-                x["net_position_value"]
-                * x["pct_to_best_target"]
+                cohort_df["net_position_value"]
+
+                * cohort_df["pct_to_best_target"]
+
             ).sum()
 
-            / x["net_position_value"].abs().sum()
+            / gross_exposure
+
         )
 
-        if x["net_position_value"].abs().sum() > 0
+    else:
 
-        else 0
-    )
-)
+        weighted_trp = 0
 
-cohort_trp = cohort_trp.reset_index()
+    cohort_trp_rows.append({
 
-cohort_trp.columns = [
+        "cohort_name": cohort,
 
-    "cohort_name",
+        "weighted_trp": weighted_trp
 
-    "weighted_trp"
+    })
 
-]
+cohort_trp = pd.DataFrame(cohort_trp_rows)
 
 cohort_trp = cohort_trp.sort_values(
 
@@ -622,11 +649,16 @@ cohort_trp = cohort_trp.sort_values(
 
 )
 
-st.subheader("📊 Cohort TRP Tension (Overlay Adjusted)")
-
 st.dataframe(
-    cohort_trp.style.format({"weighted_trp": "{:.2f}%"}),
+
+    cohort_trp.style.format({
+
+        "weighted_trp": "{:.2f}%"
+
+    }),
+
     use_container_width=True
+
 )
 
 # --------------------------------------------------
