@@ -588,12 +588,38 @@ st.dataframe(
 
 cohort_trp = (
     trp_df.groupby("cohort_name")
-    .apply(lambda x: (
-        (x["net_position_value"] * x["pct_to_best_target"]).sum()
-        / x["net_position_value"].abs().sum()
-    ) if x["net_position_value"].abs().sum() > 0 else 0)
-    .reset_index(name="weighted_trp")
-    .sort_values("weighted_trp", ascending=False)
+    .apply(
+        lambda x: (
+            (
+                x["net_position_value"]
+                * x["pct_to_best_target"]
+            ).sum()
+
+            / x["net_position_value"].abs().sum()
+        )
+
+        if x["net_position_value"].abs().sum() > 0
+
+        else 0
+    )
+)
+
+cohort_trp = cohort_trp.reset_index()
+
+cohort_trp.columns = [
+
+    "cohort_name",
+
+    "weighted_trp"
+
+]
+
+cohort_trp = cohort_trp.sort_values(
+
+    "weighted_trp",
+
+    ascending=False
+
 )
 
 st.subheader("📊 Cohort TRP Tension (Overlay Adjusted)")
