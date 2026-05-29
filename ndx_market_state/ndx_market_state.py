@@ -590,6 +590,12 @@ else:
 # KPI Cards
 # ---------------------------------------------
 
+# ---------------------------------------------
+# MARKET PERFORMANCE
+# ---------------------------------------------
+
+st.markdown("##### Market Performance")
+
 c1, c2, c3 = st.columns(3)
 
 c1.metric(
@@ -598,14 +604,18 @@ c1.metric(
 )
 
 c2.metric(
-    "Semi Share of Gains",
-    f"{semi_share_of_gains:.0f}%"
+    "Semiconductor Weight",
+    f"{semi_weight:.1f}%"
 )
 
 c3.metric(
-    "Ex-Semi Share of Gains",
-    f"{other_share_of_gains:.0f}%"
+    "Ex-Semiconductor Weight",
+    f"{other_weight:.1f}%"
 )
+
+# ---------------------------------------------
+# MARKET LEADERSHIP
+# ---------------------------------------------
 
 st.markdown("##### Market Leadership")
 
@@ -617,7 +627,7 @@ c4.metric(
 )
 
 c5.metric(
-    "NDX Weighted Ex-Semiconductor Cohort Return",
+    "NDX Weighted Ex-Semiconductor Return",
     f"{other_return:.1f}%"
 )
 
@@ -626,37 +636,66 @@ c6.metric(
     f"{semi_return - other_return:.1f}%"
 )
 
-st.markdown("##### Concentration Ratio")
+# ---------------------------------------------
+# CONTRIBUTION FRAMEWORK
+# ---------------------------------------------
 
-semi_weight = (
-    filtered[
-        filtered["cohort_name"] == "Semiconductors"
-    ]["index_weight_pct"]
-    .sum()
+semi_contribution_score = (
+    semi_weight * semi_return
+) / 100
+
+other_contribution_score = (
+    other_weight * other_return
+) / 100
+
+total_contribution_score = (
+    semi_contribution_score
+    + other_contribution_score
 )
 
-other_weight = (
-    filtered[
-        filtered["cohort_name"] != "Semiconductors"
-    ]["index_weight_pct"]
-    .sum()
+if total_contribution_score > 0:
+
+    semi_share = (
+        semi_contribution_score
+        / total_contribution_score
+    ) * 100
+
+    other_share = (
+        other_contribution_score
+        / total_contribution_score
+    ) * 100
+
+else:
+
+    semi_share = 0
+    other_share = 0
+
+st.markdown(
+    "##### Current-Weight Contribution Framework"
 )
 
 c7, c8, c9 = st.columns(3)
 
 c7.metric(
-    "Semiconductor Weight",
-    f"{semi_weight:.1f}%"
+    "Semi Contribution Score",
+    f"{semi_contribution_score:.1f}"
 )
 
 c8.metric(
-    "Non-Semiconductor Weight",
-    f"{other_weight:.1f}%"
+    "Ex-Semi Contribution Score",
+    f"{other_contribution_score:.1f}"
 )
 
 c9.metric(
-    "Concentration Ratio",
-    f"{semi_share_of_gains / semi_weight:.1f}x"
+    "Semi Share",
+    f"{semi_share:.0f}%"
+)
+
+st.caption(
+    "Contribution scores are calculated as "
+    "current NDX weight × YTD return. "
+    "These are leadership diagnostics and "
+    "do not represent official Nasdaq attribution."
 )
 
 # --------------------------------------------------
