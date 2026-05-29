@@ -687,7 +687,7 @@ c8.metric(
 )
 
 c9.metric(
-    "Semi Share",
+    "Semi Share of Contribution Score",
     f"{semi_share:.0f}%"
 )
 
