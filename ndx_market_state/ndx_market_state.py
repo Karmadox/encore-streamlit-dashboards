@@ -612,12 +612,12 @@ st.markdown("##### Market Leadership")
 c4, c5, c6 = st.columns(3)
 
 c4.metric(
-    "Semiconductor Cohort Return",
+    "NDX Weighted Semiconductor Return",
     f"{semi_return:.1f}%"
 )
 
 c5.metric(
-    "Ex-Semiconductor Cohort Return",
+    "NDX Weighted Ex-Semiconductor Cohort Return",
     f"{other_return:.1f}%"
 )
 
