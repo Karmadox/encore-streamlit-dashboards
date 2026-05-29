@@ -515,6 +515,26 @@ else:
 
     other_return = 0
 
+semi_weight = (
+    filtered[
+        filtered["cohort_name"] == "Semiconductors"
+    ]["index_weight_pct"]
+    .sum()
+)
+
+other_weight = (
+    filtered[
+        filtered["cohort_name"] != "Semiconductors"
+    ]["index_weight_pct"]
+    .sum()
+)
+
+implied_ndx = (
+    semi_return * semi_weight / 100
+    +
+    other_return * other_weight / 100
+)
+
 # ---------------------------------------------
 # KPI Cards
 # ---------------------------------------------
@@ -547,50 +567,26 @@ c3.metric(
 
 st.subheader("Debug Reconciliation")
 
-st.metric(
-    "Implied NDX From Cohorts",
-    f"{implied_ndx:.2f}%"
+d1, d2, d3, d4 = st.columns(4)
+
+d1.metric(
+    "Semi Weight",
+    f"{semi_weight:.1f}%"
 )
 
-st.metric(
-    "Bloomberg NDX YTD",
-    f"{official_ndx_ytd:.2f}%"
+d2.metric(
+    "Other Weight",
+    f"{other_weight:.1f}%"
 )
 
-semi_weight = (
-    filtered[
-        filtered["cohort_name"] == "Semiconductors"
-    ]["index_weight_pct"]
-    .sum()
+d3.metric(
+    "Implied NDX",
+    f"{implied_ndx:.1f}%"
 )
 
-other_weight = (
-    filtered[
-        filtered["cohort_name"] != "Semiconductors"
-    ]["index_weight_pct"]
-    .sum()
-)
-
-implied_ndx = (
-    semi_return * semi_weight / 100
-    +
-    other_return * other_weight / 100
-)
-
-st.write(
-    f"Semis Weight = {semi_weight:.2f}%"
-)
-
-st.write(
-    f"Everything Else Weight = {other_weight:.2f}%"
-)
-
-st.write(
-    f"Implied NDX Return = {implied_ndx:.2f}%"
-)
-
-st.write(
-    f"Bloomberg NDX Return = {official_ndx_ytd:.2f}%"
+d4.metric(
+    "Bloomberg NDX",
+    f"{official_ndx_ytd:.1f}%"
 )
 
 # --------------------------------------------------
