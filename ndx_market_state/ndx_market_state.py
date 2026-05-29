@@ -536,33 +536,67 @@ implied_ndx = (
 )
 
 # ---------------------------------------------
+# APPROXIMATE SHARE OF NASDAQ GAINS
+# ---------------------------------------------
+
+semi_raw = semi_weight * semi_return
+other_raw = other_weight * other_return
+
+total_raw = semi_raw + other_raw
+
+if total_raw > 0:
+
+    semi_share_of_gains = (
+        semi_raw / total_raw
+    ) * 100
+
+    other_share_of_gains = (
+        other_raw / total_raw
+    ) * 100
+
+else:
+
+    semi_share_of_gains = 0
+    other_share_of_gains = 0
+    
+# ---------------------------------------------
 # KPI Cards
 # ---------------------------------------------
 
 c1, c2, c3 = st.columns(3)
 
 c1.metric(
-
     "Nasdaq-100 YTD",
-
     f"{official_ndx_ytd:.1f}%"
-
 )
 
 c2.metric(
-
-    "Average Semiconductor Return",
-
-    f"{semi_return:.1f}%"
-
+    "Semi Share of Gains",
+    f"{semi_share_of_gains:.0f}%"
 )
 
 c3.metric(
+    "Ex-Semi Share of Gains",
+    f"{other_share_of_gains:.0f}%"
+)
 
-    "Average Non-Semiconductor Return",
+st.markdown("##### Market Leadership")
 
+c4, c5, c6 = st.columns(3)
+
+c4.metric(
+    "Semiconductor Cohort Return",
+    f"{semi_return:.1f}%"
+)
+
+c5.metric(
+    "Ex-Semiconductor Cohort Return",
     f"{other_return:.1f}%"
+)
 
+c6.metric(
+    "Performance Spread",
+    f"{semi_return - other_return:.1f}%"
 )
 
 # ---------------------------------------------
