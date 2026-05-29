@@ -545,6 +545,15 @@ c3.metric(
 
 )
 
+implied_ndx = (
+    semi_return * 0.31
+    +
+    other_return * 0.69
+)
+
+print(f"Implied Nasdaq Return = {implied_ndx:.2f}%")
+print(f"Bloomberg Nasdaq Return = {official_ndx_ytd:.2f}%")
+
 # --------------------------------------------------
 # ROLE SUMMARY
 # --------------------------------------------------
