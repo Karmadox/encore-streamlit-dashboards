@@ -604,6 +604,24 @@ st.write("Other Contribution:", other_contribution)
 st.write("Total:", semi_contribution + other_contribution)
 st.write("Bloomberg:", official_ndx_ytd)
 
+semi_df = filtered[
+    filtered["cohort_name"] == "Semiconductors"
+]
+
+st.dataframe(
+    semi_df[
+        [
+            "ticker",
+            "index_weight_pct",
+            "pct_change_ytd"
+        ]
+    ]
+    .sort_values(
+        "index_weight_pct",
+        ascending=False
+    )
+)
+
 # --------------------------------------------------
 # ROLE SUMMARY
 # --------------------------------------------------
