@@ -545,14 +545,53 @@ c3.metric(
 
 )
 
-implied_ndx = (
-    semi_return * 0.31
-    +
-    other_return * 0.69
+st.subheader("Debug Reconciliation")
+
+st.metric(
+    "Implied NDX From Cohorts",
+    f"{implied_ndx:.2f}%"
 )
 
-print(f"Implied Nasdaq Return = {implied_ndx:.2f}%")
-print(f"Bloomberg Nasdaq Return = {official_ndx_ytd:.2f}%")
+st.metric(
+    "Bloomberg NDX YTD",
+    f"{official_ndx_ytd:.2f}%"
+)
+
+semi_weight = (
+    filtered[
+        filtered["cohort_name"] == "Semiconductors"
+    ]["index_weight_pct"]
+    .sum()
+)
+
+other_weight = (
+    filtered[
+        filtered["cohort_name"] != "Semiconductors"
+    ]["index_weight_pct"]
+    .sum()
+)
+
+implied_ndx = (
+    semi_return * semi_weight / 100
+    +
+    other_return * other_weight / 100
+)
+
+st.write(
+    f"Semis Weight = {semi_weight:.2f}%"
+)
+
+st.write(
+    f"Everything Else Weight = {other_weight:.2f}%"
+)
+
+st.write(
+    f"Implied NDX Return = {implied_ndx:.2f}%"
+)
+
+st.write(
+    f"Bloomberg NDX Return = {official_ndx_ytd:.2f}%"
+)
 
 # --------------------------------------------------
 # ROLE SUMMARY
