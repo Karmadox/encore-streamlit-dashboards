@@ -479,6 +479,33 @@ semis = perf_summary[
     == "Semiconductors"
 ]
 
+semi_df = filtered[
+    filtered["cohort_name"] == "Semiconductors"
+].copy()
+
+semi_df["weighted_contribution"] = (
+    semi_df["pct_change_ytd"]
+    * semi_df["index_weight_pct"]
+)
+
+st.subheader("🔬 Semiconductor Cohort Decomposition")
+
+st.dataframe(
+    semi_df[
+        [
+            "ticker",
+            "index_weight_pct",
+            "pct_change_ytd",
+            "weighted_contribution"
+        ]
+    ]
+    .sort_values(
+        "weighted_contribution",
+        ascending=False
+    ),
+    use_container_width=True
+)
+
 everything_else = perf_summary[
     perf_summary["cohort_name"]
     != "Semiconductors"
