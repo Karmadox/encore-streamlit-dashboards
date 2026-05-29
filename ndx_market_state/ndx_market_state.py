@@ -699,9 +699,9 @@ st.caption(
 )
 
 st.caption(
-    "Methodology Note"
-    "Semiconductor returns are calculated using current Nasdaq-100 constituent weights rather than semiconductor market-cap weights."
-    "For reference, a Bloomberg market-cap-weighted semiconductor basket returned approximately +64% YTD versus +83% under the Nasdaq-weighted framework."
+    "Methodology Note "
+    "Semiconductor returns are calculated using current Nasdaq-100 constituent weights rather than semiconductor market-cap weights. "
+    "For reference, a Bloomberg market-cap-weighted semiconductor basket returned approximately +64% YTD versus +83% under the Nasdaq-weighted framework. "
 )
 
 # --------------------------------------------------
