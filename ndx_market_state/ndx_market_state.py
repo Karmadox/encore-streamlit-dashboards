@@ -551,7 +551,7 @@ c1.metric(
 
 c2.metric(
 
-    "Semis YTD",
+    "Average Semiconductor Return",
 
     f"{semi_return:.1f}%"
 
@@ -559,67 +559,47 @@ c2.metric(
 
 c3.metric(
 
-    "Everything Else YTD",
+    "Average Non-Semiconductor Return",
 
     f"{other_return:.1f}%"
 
 )
 
-st.subheader("Debug Reconciliation")
+# ---------------------------------------------
+# Market Leadership Attribution
+# ---------------------------------------------
 
-d1, d2, d3, d4 = st.columns(4)
+st.markdown("##### Market Leadership Attribution")
 
-d1.metric(
-    "Semi Weight",
+semi_weight = (
+    filtered[
+        filtered["cohort_name"] == "Semiconductors"
+    ]["index_weight_pct"]
+    .sum()
+)
+
+other_weight = (
+    filtered[
+        filtered["cohort_name"] != "Semiconductors"
+    ]["index_weight_pct"]
+    .sum()
+)
+
+c4, c5, c6 = st.columns(3)
+
+c4.metric(
+    "Semiconductor Weight",
     f"{semi_weight:.1f}%"
 )
 
-d2.metric(
-    "Other Weight",
+c5.metric(
+    "Non-Semiconductor Weight",
     f"{other_weight:.1f}%"
 )
 
-d3.metric(
-    "Implied NDX",
-    f"{implied_ndx:.1f}%"
-)
-
-d4.metric(
-    "Bloomberg NDX",
-    f"{official_ndx_ytd:.1f}%"
-)
-
-semi_contribution = perf_summary.loc[
-    perf_summary["cohort_name"] == "Semiconductors",
-    "index_contribution"
-].iloc[0]
-
-other_contribution = perf_summary.loc[
-    perf_summary["cohort_name"] != "Semiconductors",
-    "index_contribution"
-].sum()
-
-st.write("Semi Contribution:", semi_contribution)
-st.write("Other Contribution:", other_contribution)
-st.write("Total:", semi_contribution + other_contribution)
-st.write("Bloomberg:", official_ndx_ytd)
-
-semi_df = filtered[
-    filtered["cohort_name"] == "Semiconductors"
-]
-
-st.dataframe(
-    semi_df[
-        [
-            "ticker",
-            "index_weight_pct",
-            "pct_change_ytd"
-        ]
-    ]
-    .sort_values(
-        "index_weight_pct",
-        ascending=False
-    )
+c6.metric(
+    "Performance Spread",
+    f"{semi_return - other_return:.1f}%"
 )
 
 # --------------------------------------------------
