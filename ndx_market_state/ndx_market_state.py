@@ -599,11 +599,7 @@ c6.metric(
     f"{semi_return - other_return:.1f}%"
 )
 
-# ---------------------------------------------
-# Market Leadership Attribution
-# ---------------------------------------------
-
-st.markdown("##### Market Leadership Attribution")
+st.markdown("##### Concentration Ratio")
 
 semi_weight = (
     filtered[
@@ -619,21 +615,21 @@ other_weight = (
     .sum()
 )
 
-c4, c5, c6 = st.columns(3)
+c7, c8, c9 = st.columns(3)
 
-c4.metric(
+c7.metric(
     "Semiconductor Weight",
     f"{semi_weight:.1f}%"
 )
 
-c5.metric(
+c8.metric(
     "Non-Semiconductor Weight",
     f"{other_weight:.1f}%"
 )
 
-c6.metric(
-    "Performance Spread",
-    f"{semi_return - other_return:.1f}%"
+c9.metric(
+    "Concentration Ratio",
+    f"{semi_share_of_gains / semi_weight:.1f}x"
 )
 
 # --------------------------------------------------
