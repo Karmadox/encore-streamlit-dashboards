@@ -589,6 +589,21 @@ d4.metric(
     f"{official_ndx_ytd:.1f}%"
 )
 
+semi_contribution = perf_summary.loc[
+    perf_summary["cohort_name"] == "Semiconductors",
+    "index_contribution"
+].iloc[0]
+
+other_contribution = perf_summary.loc[
+    perf_summary["cohort_name"] != "Semiconductors",
+    "index_contribution"
+].sum()
+
+st.write("Semi Contribution:", semi_contribution)
+st.write("Other Contribution:", other_contribution)
+st.write("Total:", semi_contribution + other_contribution)
+st.write("Bloomberg:", official_ndx_ytd)
+
 # --------------------------------------------------
 # ROLE SUMMARY
 # --------------------------------------------------
