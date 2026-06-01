@@ -587,108 +587,63 @@ else:
     other_share_of_gains = 0
     
 # ---------------------------------------------
-# KPI Cards
-# ---------------------------------------------
-
-# ---------------------------------------------
 # MARKET PERFORMANCE
 # ---------------------------------------------
 
-st.markdown("##### Market Performance")
+st.divider()
 
-c1, c2, c3 = st.columns(3)
+st.subheader("📈 Market Performance")
 
-c1.metric(
-    "Nasdaq-100 YTD",
+st.metric(
+    "Official Nasdaq-100 YTD Return",
     f"{official_ndx_ytd:.1f}%"
 )
 
-c2.metric(
-    "Semiconductor Weight",
-    f"{semi_weight:.1f}%"
+semi_product = semi_weight * semi_return / 100
+other_product = other_weight * other_return / 100
+
+total_product = semi_product + other_product
+
+market_perf = pd.DataFrame({
+    "Group": [
+        "Semiconductors",
+        "Non-Semiconductors",
+        "Total"
+    ],
+    "Weight (%)": [
+        semi_weight,
+        other_weight,
+        100.0
+    ],
+    "Return (%)": [
+        semi_return,
+        other_return,
+        None
+    ],
+    "Product (%)": [
+        semi_product,
+        other_product,
+        total_product
+    ],
+    "Contribution (%)": [
+        semi_product / total_product * 100,
+        other_product / total_product * 100,
+        100.0
+    ]
+})
+
+st.dataframe(
+    market_perf.style.format({
+        "Weight (%)": "{:.1f}",
+        "Return (%)": "{:.1f}",
+        "Product (%)": "{:.2f}",
+        "Contribution (%)": "{:.1f}"
+    }),
+    use_container_width=True
 )
 
-c3.metric(
-    "Ex-Semiconductor Weight",
-    f"{other_weight:.1f}%"
-)
-
-# ---------------------------------------------
-# MARKET LEADERSHIP
-# ---------------------------------------------
-
-st.markdown("##### Market Leadership")
-
-c4, c5, c6 = st.columns(3)
-
-c4.metric(
-    "NDX Weighted Semiconductor Return",
-    f"{semi_return:.1f}%"
-)
-
-c5.metric(
-    "NDX Weighted Ex-Semiconductor Return",
-    f"{other_return:.1f}%"
-)
-
-c6.metric(
-    "Performance Spread",
-    f"{semi_return - other_return:.1f}%"
-)
-
-# ---------------------------------------------
-# CONTRIBUTION FRAMEWORK
-# ---------------------------------------------
-
-semi_contribution_score = (
-    semi_weight * semi_return
-) / 100
-
-other_contribution_score = (
-    other_weight * other_return
-) / 100
-
-total_contribution_score = (
-    semi_contribution_score
-    + other_contribution_score
-)
-
-if total_contribution_score > 0:
-
-    semi_share = (
-        semi_contribution_score
-        / total_contribution_score
-    ) * 100
-
-    other_share = (
-        other_contribution_score
-        / total_contribution_score
-    ) * 100
-
-else:
-
-    semi_share = 0
-    other_share = 0
-
-st.markdown(
-    "##### Current-Weight Contribution Framework"
-)
-
-c7, c8, c9 = st.columns(3)
-
-c7.metric(
-    "Semi Contribution Score",
-    f"{semi_contribution_score:.1f}"
-)
-
-c8.metric(
-    "Ex-Semi Contribution Score",
-    f"{other_contribution_score:.1f}"
-)
-
-c9.metric(
-    "Semi Share of Contribution Score",
-    f"{semi_share:.0f}%"
+st.caption(
+    "Contribution = (Weight × Return) ÷ Total Contribution."
 )
 
 st.caption(
@@ -700,8 +655,7 @@ st.caption(
 
 st.caption(
     "Methodology Note: "
-    "Semiconductor returns are calculated using current Nasdaq-100 constituent weights rather than semiconductor market-cap weights. "
-    "For reference, a Bloomberg market-cap-weighted semiconductor basket returned approximately +64% YTD versus +83% under the Nasdaq-weighted framework. "
+    "Returns are calculated using current Nasdaq-100 constituent weights rather than market-cap weights nor historical constituent weights. "
 )
 
 # --------------------------------------------------
