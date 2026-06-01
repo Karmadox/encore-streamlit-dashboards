@@ -655,7 +655,7 @@ st.caption(
 
 st.caption(
     "Methodology Note: "
-    "Returns are calculated using current Nasdaq-100 constituent weights rather than market-cap weights nor historical constituent weights. "
+    "Returns are calculated using current Nasdaq-100 constituent weights rather than market-cap weights or historical constituent weights. "
 )
 
 # --------------------------------------------------
