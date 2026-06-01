@@ -343,119 +343,6 @@ c1,c2,c3 = st.columns(3)
 c1.metric("Real (Selected)", f"{filtered['real_value'].sum():,.0f}")
 c2.metric("Synthetic (Selected)", f"{filtered['synthetic_value'].sum():,.0f}")
 c3.metric("Net (Selected)", f"{filtered['net_position_value'].sum():,.0f}")
-    
-# ---------------------------------------------
-# MARKET PERFORMANCE
-# ---------------------------------------------
-
-st.markdown("##### Market Performance")
-
-c1, c2, c3 = st.columns(3)
-
-c1.metric(
-    "Nasdaq-100 YTD",
-    f"{official_ndx_ytd:.1f}%"
-)
-
-c2.metric(
-    "Semiconductor Weight",
-    f"{semi_weight:.1f}%"
-)
-
-c3.metric(
-    "Ex-Semiconductor Weight",
-    f"{other_weight:.1f}%"
-)
-
-# ---------------------------------------------
-# MARKET LEADERSHIP
-# ---------------------------------------------
-
-st.markdown("##### Market Leadership")
-
-c4, c5, c6 = st.columns(3)
-
-c4.metric(
-    "NDX Weighted Semiconductor Return",
-    f"{semi_return:.1f}%"
-)
-
-c5.metric(
-    "NDX Weighted Ex-Semiconductor Return",
-    f"{other_return:.1f}%"
-)
-
-c6.metric(
-    "Performance Spread",
-    f"{semi_return - other_return:.1f}%"
-)
-
-# ---------------------------------------------
-# CONTRIBUTION FRAMEWORK
-# ---------------------------------------------
-
-semi_contribution_score = (
-    semi_weight * semi_return
-) / 100
-
-other_contribution_score = (
-    other_weight * other_return
-) / 100
-
-total_contribution_score = (
-    semi_contribution_score
-    + other_contribution_score
-)
-
-if total_contribution_score > 0:
-
-    semi_share = (
-        semi_contribution_score
-        / total_contribution_score
-    ) * 100
-
-    other_share = (
-        other_contribution_score
-        / total_contribution_score
-    ) * 100
-
-else:
-
-    semi_share = 0
-    other_share = 0
-
-st.markdown(
-    "##### Current-Weight Contribution Framework"
-)
-
-c7, c8, c9 = st.columns(3)
-
-c7.metric(
-    "Semi Contribution Score",
-    f"{semi_contribution_score:.1f}"
-)
-
-c8.metric(
-    "Ex-Semi Contribution Score",
-    f"{other_contribution_score:.1f}"
-)
-
-c9.metric(
-    "Semi Share of Contribution Score",
-    f"{semi_share:.0f}%"
-)
-
-st.caption(
-    "Contribution scores are calculated as "
-    "current NDX weight × YTD return. "
-    "These are leadership diagnostics and "
-    "do not represent official Nasdaq attribution."
-)
-
-st.caption(
-    "Methodology Note: "
-    "Returns are calculated using current Nasdaq-100 constituent weights rather than market cap weights or historic constituent weights which change during the year."
-)
 
 # --------------------------------------------------
 # YTD PERFORMANCE DECOMPOSITION
@@ -559,8 +446,29 @@ perf_summary = perf_summary.sort_values(
 
 )
 
-
 perf_summary = perf_summary.reset_index(drop=True)
+
+# ---------------------------------------------
+# Display
+# ---------------------------------------------
+
+st.dataframe(
+
+    perf_summary.style.format({
+
+        "avg_ytd_return": "{:.2f}%",
+
+        "weighted_ytd_return": "{:.2f}%",
+
+        "index_contribution": "{:.2f}%",
+
+        "total_weight": "{:.2f}%"
+
+    }),
+
+    use_container_width=True
+
+)
 
 # ---------------------------------------------
 # Semiconductor vs Rest
@@ -677,28 +585,123 @@ else:
 
     semi_share_of_gains = 0
     other_share_of_gains = 0
-
+    
+# ---------------------------------------------
+# KPI Cards
+# ---------------------------------------------
 
 # ---------------------------------------------
-# Display
+# MARKET PERFORMANCE
 # ---------------------------------------------
 
-st.dataframe(
+st.markdown("##### Market Performance")
 
-    perf_summary.style.format({
+c1, c2, c3 = st.columns(3)
 
-        "avg_ytd_return": "{:.2f}%",
+c1.metric(
+    "Nasdaq-100 YTD",
+    f"{official_ndx_ytd:.1f}%"
+)
 
-        "weighted_ytd_return": "{:.2f}%",
+c2.metric(
+    "Semiconductor Weight",
+    f"{semi_weight:.1f}%"
+)
 
-        "index_contribution": "{:.2f}%",
+c3.metric(
+    "Ex-Semiconductor Weight",
+    f"{other_weight:.1f}%"
+)
 
-        "total_weight": "{:.2f}%"
+# ---------------------------------------------
+# MARKET LEADERSHIP
+# ---------------------------------------------
 
-    }),
+st.markdown("##### Market Leadership")
 
-    use_container_width=True
+c4, c5, c6 = st.columns(3)
 
+c4.metric(
+    "NDX Weighted Semiconductor Return",
+    f"{semi_return:.1f}%"
+)
+
+c5.metric(
+    "NDX Weighted Ex-Semiconductor Return",
+    f"{other_return:.1f}%"
+)
+
+c6.metric(
+    "Performance Spread",
+    f"{semi_return - other_return:.1f}%"
+)
+
+# ---------------------------------------------
+# CONTRIBUTION FRAMEWORK
+# ---------------------------------------------
+
+semi_contribution_score = (
+    semi_weight * semi_return
+) / 100
+
+other_contribution_score = (
+    other_weight * other_return
+) / 100
+
+total_contribution_score = (
+    semi_contribution_score
+    + other_contribution_score
+)
+
+if total_contribution_score > 0:
+
+    semi_share = (
+        semi_contribution_score
+        / total_contribution_score
+    ) * 100
+
+    other_share = (
+        other_contribution_score
+        / total_contribution_score
+    ) * 100
+
+else:
+
+    semi_share = 0
+    other_share = 0
+
+st.markdown(
+    "##### Current-Weight Contribution Framework"
+)
+
+c7, c8, c9 = st.columns(3)
+
+c7.metric(
+    "Semi Contribution Score",
+    f"{semi_contribution_score:.1f}"
+)
+
+c8.metric(
+    "Ex-Semi Contribution Score",
+    f"{other_contribution_score:.1f}"
+)
+
+c9.metric(
+    "Semi Share of Contribution Score",
+    f"{semi_share:.0f}%"
+)
+
+st.caption(
+    "Contribution scores are calculated as "
+    "current NDX weight × YTD return. "
+    "These are leadership diagnostics and "
+    "do not represent official Nasdaq attribution."
+)
+
+st.caption(
+    "Methodology Note: "
+    "Semiconductor returns are calculated using current Nasdaq-100 constituent weights rather than semiconductor market-cap weights. "
+    "For reference, a Bloomberg market-cap-weighted semiconductor basket returned approximately +64% YTD versus +83% under the Nasdaq-weighted framework. "
 )
 
 # --------------------------------------------------
