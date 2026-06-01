@@ -343,122 +343,6 @@ c1,c2,c3 = st.columns(3)
 c1.metric("Real (Selected)", f"{filtered['real_value'].sum():,.0f}")
 c2.metric("Synthetic (Selected)", f"{filtered['synthetic_value'].sum():,.0f}")
 c3.metric("Net (Selected)", f"{filtered['net_position_value'].sum():,.0f}")
-
-# ---------------------------------------------
-# Semiconductor vs Rest
-# ---------------------------------------------
-
-semis = perf_summary[
-    perf_summary["cohort_name"]
-    == "Semiconductors"
-]
-
-semi_df = filtered[
-    filtered["cohort_name"] == "Semiconductors"
-].copy()
-
-semi_df["weighted_contribution"] = (
-    semi_df["pct_change_ytd"]
-    * semi_df["index_weight_pct"]
-)
-
-st.subheader("🔬 Semiconductor Cohort Decomposition")
-
-st.dataframe(
-    semi_df[
-        [
-            "ticker",
-            "index_weight_pct",
-            "pct_change_ytd",
-            "weighted_contribution"
-        ]
-    ]
-    .sort_values(
-        "weighted_contribution",
-        ascending=False
-    ),
-    use_container_width=True
-)
-
-everything_else = perf_summary[
-    perf_summary["cohort_name"]
-    != "Semiconductors"
-]
-
-semi_return = (
-
-    semis["weighted_ytd_return"].iloc[0]
-
-    if not semis.empty
-
-    else 0
-
-)
-
-other_weights = everything_else["total_weight"].sum()
-
-if other_weights > 0:
-
-    other_return = (
-
-        (
-            everything_else["weighted_ytd_return"]
-
-            * everything_else["total_weight"]
-
-        ).sum()
-
-        / other_weights
-
-    )
-
-else:
-
-    other_return = 0
-
-semi_weight = (
-    filtered[
-        filtered["cohort_name"] == "Semiconductors"
-    ]["index_weight_pct"]
-    .sum()
-)
-
-other_weight = (
-    filtered[
-        filtered["cohort_name"] != "Semiconductors"
-    ]["index_weight_pct"]
-    .sum()
-)
-
-implied_ndx = (
-    semi_return * semi_weight / 100
-    +
-    other_return * other_weight / 100
-)
-
-# ---------------------------------------------
-# APPROXIMATE SHARE OF NASDAQ GAINS
-# ---------------------------------------------
-
-semi_raw = semi_weight * semi_return
-other_raw = other_weight * other_return
-
-total_raw = semi_raw + other_raw
-
-if total_raw > 0:
-
-    semi_share_of_gains = (
-        semi_raw / total_raw
-    ) * 100
-
-    other_share_of_gains = (
-        other_raw / total_raw
-    ) * 100
-
-else:
-
-    semi_share_of_gains = 0
-    other_share_of_gains = 0
     
 # ---------------------------------------------
 # MARKET PERFORMANCE
@@ -675,7 +559,125 @@ perf_summary = perf_summary.sort_values(
 
 )
 
+
 perf_summary = perf_summary.reset_index(drop=True)
+
+# ---------------------------------------------
+# Semiconductor vs Rest
+# ---------------------------------------------
+
+semis = perf_summary[
+    perf_summary["cohort_name"]
+    == "Semiconductors"
+]
+
+semi_df = filtered[
+    filtered["cohort_name"] == "Semiconductors"
+].copy()
+
+semi_df["weighted_contribution"] = (
+    semi_df["pct_change_ytd"]
+    * semi_df["index_weight_pct"]
+)
+
+st.subheader("🔬 Semiconductor Cohort Decomposition")
+
+st.dataframe(
+    semi_df[
+        [
+            "ticker",
+            "index_weight_pct",
+            "pct_change_ytd",
+            "weighted_contribution"
+        ]
+    ]
+    .sort_values(
+        "weighted_contribution",
+        ascending=False
+    ),
+    use_container_width=True
+)
+
+everything_else = perf_summary[
+    perf_summary["cohort_name"]
+    != "Semiconductors"
+]
+
+semi_return = (
+
+    semis["weighted_ytd_return"].iloc[0]
+
+    if not semis.empty
+
+    else 0
+
+)
+
+other_weights = everything_else["total_weight"].sum()
+
+if other_weights > 0:
+
+    other_return = (
+
+        (
+            everything_else["weighted_ytd_return"]
+
+            * everything_else["total_weight"]
+
+        ).sum()
+
+        / other_weights
+
+    )
+
+else:
+
+    other_return = 0
+
+semi_weight = (
+    filtered[
+        filtered["cohort_name"] == "Semiconductors"
+    ]["index_weight_pct"]
+    .sum()
+)
+
+other_weight = (
+    filtered[
+        filtered["cohort_name"] != "Semiconductors"
+    ]["index_weight_pct"]
+    .sum()
+)
+
+implied_ndx = (
+    semi_return * semi_weight / 100
+    +
+    other_return * other_weight / 100
+)
+
+# ---------------------------------------------
+# APPROXIMATE SHARE OF NASDAQ GAINS
+# ---------------------------------------------
+
+semi_raw = semi_weight * semi_return
+other_raw = other_weight * other_return
+
+total_raw = semi_raw + other_raw
+
+if total_raw > 0:
+
+    semi_share_of_gains = (
+        semi_raw / total_raw
+    ) * 100
+
+    other_share_of_gains = (
+        other_raw / total_raw
+    ) * 100
+
+else:
+
+    semi_share_of_gains = 0
+    other_share_of_gains = 0
+
 
 # ---------------------------------------------
 # Display
