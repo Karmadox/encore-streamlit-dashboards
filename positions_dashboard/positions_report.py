@@ -1267,7 +1267,9 @@ elif active_tab == "📅 Return Matrix":
             .reindex(columns=visible_dates)
         )
 
-        csv = export_matrix.to_csv()
+        csv = export_matrix.to_csv(
+            float_format="%.2f"
+        )
 
         st.download_button(
             "📥 Export Universe Returns",
