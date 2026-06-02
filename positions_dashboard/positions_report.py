@@ -392,6 +392,7 @@ def return_to_bucket(ret_pct):
 # HEATMAP
 # -------------------------------------------------
 def render_heatmap(df, title):
+
     st.markdown(f"**{title}**")
 
     if df.empty:
@@ -405,7 +406,7 @@ def render_heatmap(df, title):
         border-radius:6px;
         overflow-x:auto;
         overflow-y:auto;
-        max-height:420px;
+        max-height:700px;
         border:1px solid #eee;
     ">
       <table style="
@@ -416,7 +417,16 @@ def render_heatmap(df, title):
       ">
         <thead>
           <tr>
-            <th style="text-align:left;padding:4px;position:sticky;left:0;background:white;z-index:2;">
+            <th style="
+                text-align:left;
+                padding:4px;
+                position:sticky;
+                left:0;
+                top:0;
+                background:white;
+                z-index:4;
+                border-bottom:1px solid #ddd;
+            ">
               Name
             </th>
     """
@@ -427,12 +437,24 @@ def render_heatmap(df, title):
             padding:4px;
             text-align:center;
             white-space:nowrap;
-        ">{c}</th>
+            position:sticky;
+            top:0;
+            background:white;
+            z-index:3;
+            border-bottom:1px solid #ddd;
+        ">
+            {c}
+        </th>
         """
 
-    html += "</tr></thead><tbody>"
+    html += """
+          </tr>
+        </thead>
+        <tbody>
+    """
 
     for idx, row in df.iterrows():
+
         html += f"""
         <tr>
           <td style="
@@ -441,11 +463,16 @@ def render_heatmap(df, title):
               position:sticky;
               left:0;
               background:white;
-              z-index:1;
-          ">{idx}</td>
+              z-index:2;
+              border-right:1px solid #ddd;
+              white-space:nowrap;
+          ">
+              {idx}
+          </td>
         """
 
         for v in row:
+
             html += f"""
             <td style="
                 padding:4px;
@@ -459,10 +486,18 @@ def render_heatmap(df, title):
 
         html += "</tr>"
 
-    html += "</tbody></table></div>"
+    html += """
+        </tbody>
+      </table>
+    </div>
+    """
 
-    components.html(html, height=min(320, 40 + 26 * len(df)), scrolling=False)
-
+    components.html(
+        html,
+        height=min(520, 60 + 26 * len(df)),
+        scrolling=False
+    )
+    
 # -------------------------------------------------
 # LOAD DATA
 # -------------------------------------------------
