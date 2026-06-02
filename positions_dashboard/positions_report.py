@@ -305,12 +305,15 @@ def load_return_matrix_data():
             i.instrument_id,
             i.ticker,
             i.name,
-            p.log_return
+            p.close_price
         FROM encoredb.equity_daily_prices p
         JOIN encoredb.instruments i
           ON p.instrument_id = i.instrument_id
         WHERE i.active_flag = true
-        ORDER BY p.trade_date
+          AND p.trade_date >= (
+              CURRENT_DATE - INTERVAL '120 days'
+          )
+        ORDER BY i.instrument_id, p.trade_date
     """
 
     with get_conn() as conn:
@@ -1064,9 +1067,15 @@ elif active_tab == "📅 Return Matrix":
 
     import numpy as np
 
+    returns = returns.sort_values(
+        ["instrument_id", "trade_date"]
+    )
+
     returns["return_pct"] = (
-        np.exp(returns["log_return"]) - 1
-    ) * 100
+        returns.groupby("instrument_id")["close_price"]
+        .pct_change()
+        * 100
+    )
 
     # -----------------------------------------
     # Window selector
