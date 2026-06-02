@@ -296,6 +296,26 @@ def load_daily_eod():
     with get_conn() as conn:
         return pd.read_sql(sql, conn)
 
+@st.cache_data(ttl=300)
+def load_return_matrix_data():
+
+    sql = """
+        SELECT
+            p.trade_date,
+            i.instrument_id,
+            i.ticker,
+            i.name,
+            p.log_return
+        FROM encoredb.equity_daily_prices p
+        JOIN encoredb.instruments i
+          ON p.instrument_id = i.instrument_id
+        WHERE i.active_flag = true
+        ORDER BY p.trade_date
+    """
+
+    with get_conn() as conn:
+        return pd.read_sql(sql, conn)
+        
 # -------------------------------------------------
 # MOVE BUCKETS
 # -------------------------------------------------
@@ -337,6 +357,34 @@ BUCKET_COLOR = {
     "> 3% down": "#b71c1c",
 }
 
+def return_to_bucket(ret_pct):
+
+    if pd.isna(ret_pct):
+        return ""
+
+    if ret_pct > 3:
+        return "> 3% up"
+
+    if ret_pct > 2:
+        return "2–3% up"
+
+    if ret_pct > 1:
+        return "1–2% up"
+
+    if ret_pct >= 0:
+        return "< 1% up"
+
+    if ret_pct > -1:
+        return "< 1% down"
+
+    if ret_pct > -2:
+        return "1–2% down"
+
+    if ret_pct > -3:
+        return "2–3% down"
+
+    return "> 3% down"
+    
 # -------------------------------------------------
 # HEATMAP
 # -------------------------------------------------
@@ -471,6 +519,7 @@ TAB_NAMES = [
     "🏭 Sector Driven",
     "📆 Daily Sector Driven",
     "📈 Price Change Driven",
+    "📅 Return Matrix",
     "📊 52W Regime Monitor",
 ]
 
@@ -990,7 +1039,199 @@ elif active_tab == "📈 Price Change Driven":
         )
 
 # =================================================
-# TAB 4 — HOLDINGS WITHIN 5% OF 52W HIGH / LOW
+# TAB 4 — RETURN MATRIX
+# =================================================
+elif active_tab == "📅 Return Matrix":
+
+    st.header("📅 Return Matrix")
+
+    returns = load_return_matrix_data()
+
+    if returns.empty:
+        st.info("No return data available.")
+        st.stop()
+
+    # -----------------------------------------
+    # Convert log return -> %
+    # -----------------------------------------
+
+    import numpy as np
+
+    returns["return_pct"] = (
+        np.exp(returns["log_return"]) - 1
+    ) * 100
+
+    # -----------------------------------------
+    # Window selector
+    # -----------------------------------------
+
+    all_dates = sorted(
+        returns["trade_date"].unique()
+    )
+
+    default_window = min(
+        60,
+        len(all_dates)
+    )
+
+    window = st.slider(
+        "Number of trading days to display",
+        min_value=20,
+        max_value=len(all_dates),
+        value=default_window,
+        key="return_matrix_window",
+    )
+
+    visible_dates = all_dates[-window:]
+
+    returns = returns[
+        returns["trade_date"].isin(visible_dates)
+    ]
+
+    # -----------------------------------------
+    # Holdings vs Universe
+    # -----------------------------------------
+
+    holdings_tab, universe_tab = st.tabs(
+        ["📊 Holdings", "🌍 Universe"]
+    )
+
+    # =================================================
+    # HOLDINGS
+    # =================================================
+
+    with holdings_tab:
+
+        holdings_sql = """
+            SELECT DISTINCT
+                instrument_id
+            FROM encoredb.positions_eod_snapshot
+            WHERE snapshot_date = (
+                SELECT MAX(snapshot_date)
+                FROM encoredb.positions_eod_snapshot
+            )
+        """
+
+        with get_conn() as conn:
+            holdings = pd.read_sql(
+                holdings_sql,
+                conn
+            )
+
+        holdings_returns = returns.merge(
+            holdings,
+            on="instrument_id",
+            how="inner"
+        )
+
+        holdings_returns["bucket"] = (
+            holdings_returns["return_pct"]
+            .apply(return_to_bucket)
+        )
+
+        matrix = (
+            holdings_returns
+            .pivot(
+                index="ticker",
+                columns="trade_date",
+                values="bucket"
+            )
+            .reindex(columns=visible_dates)
+        )
+
+        st.caption(
+            "Arrow symbols represent daily percentage moves."
+        )
+
+        render_heatmap(
+            matrix,
+            "📊 Holdings Return Matrix"
+        )
+
+        export_matrix = (
+            holdings_returns
+            .pivot(
+                index="ticker",
+                columns="trade_date",
+                values="return_pct"
+            )
+            .reindex(columns=visible_dates)
+        )
+
+        csv = export_matrix.to_csv()
+
+        st.download_button(
+            "📥 Export Holdings Returns",
+            csv,
+            file_name="holdings_return_matrix.csv",
+            mime="text/csv",
+        )
+
+    # =================================================
+    # UNIVERSE
+    # =================================================
+
+    with universe_tab:
+
+        ticker_filter = st.text_input(
+            "Filter tickers",
+            key="universe_filter"
+        )
+
+        universe_returns = returns.copy()
+
+        if ticker_filter:
+
+            universe_returns = universe_returns[
+                universe_returns["ticker"]
+                .str.contains(
+                    ticker_filter,
+                    case=False,
+                    na=False
+                )
+            ]
+
+        universe_returns["bucket"] = (
+            universe_returns["return_pct"]
+            .apply(return_to_bucket)
+        )
+
+        matrix = (
+            universe_returns
+            .pivot(
+                index="ticker",
+                columns="trade_date",
+                values="bucket"
+            )
+            .reindex(columns=visible_dates)
+        )
+
+        render_heatmap(
+            matrix,
+            "🌍 Universe Return Matrix"
+        )
+
+        export_matrix = (
+            universe_returns
+            .pivot(
+                index="ticker",
+                columns="trade_date",
+                values="return_pct"
+            )
+            .reindex(columns=visible_dates)
+        )
+
+        csv = export_matrix.to_csv()
+
+        st.download_button(
+            "📥 Export Universe Returns",
+            csv,
+            file_name="universe_return_matrix.csv",
+            mime="text/csv",
+        )
+        
+# =================================================
+# TAB 5 — HOLDINGS WITHIN 5% OF 52W HIGH / LOW
 # =================================================
 elif active_tab == "📊 52W Regime Monitor":
 
