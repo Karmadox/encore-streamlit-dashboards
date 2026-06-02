@@ -1047,6 +1047,13 @@ elif active_tab == "📅 Return Matrix":
 
     returns = load_return_matrix_data()
 
+    st.write(returns.dtypes)
+
+    st.write(
+        returns["log_return"]
+        .head(20)
+    )
+
     if returns.empty:
         st.info("No return data available.")
         st.stop()
