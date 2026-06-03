@@ -824,12 +824,19 @@ hist_attr["historical_return"] = (
     np.exp(hist_attr["total_log_return"]) - 1
 ) * 100
 
-total_hist_return = hist_attr["historical_return"].sum()
+total_hist_return = chain_linked_ndx
 
 hist_attr["share_of_return"] = (
     hist_attr["historical_return"]
     / total_hist_return
 ) * 100
+
+hist_attr["sort_order"] = hist_attr["grp"].map({
+    "Semiconductors": 1,
+    "Non-Semiconductors": 2
+})
+
+hist_attr = hist_attr.sort_values("sort_order")
 
 total_row = pd.DataFrame({
     "grp": ["Total"],
@@ -844,17 +851,23 @@ hist_attr = pd.concat(
 
 st.subheader("📈 Historical Performance Attribution")
 
+
 st.dataframe(
-    hist_attr.rename(columns={
+    hist_attr = hist_attr[
+        [
+            "grp",
+            "historical_return",
+            "share_of_return"
+        ]
+    ]
+    
+    hist_attr = hist_attr.rename(columns={
         "grp": "Group",
         "historical_return": "Historical Contribution (%)",
         "share_of_return": "Share of Historical Return (%)"
-    }).style.format({
-        "Historical Contribution (%)": "{:.2f}",
-        "Share of Historical Return (%)": "{:.1f}"
     }),
-    use_container_width=True
-)
+        use_container_width=True
+    )
 
 st.caption(
     "Uses daily constituent weights and daily stock returns "
