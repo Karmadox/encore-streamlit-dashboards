@@ -115,6 +115,75 @@ def load_official_ndx_ytd():
         else None
 
     )
+
+@st.cache_data(ttl=300)
+def load_chain_linked_return():
+
+    sql = """
+    WITH price_returns AS (
+
+        SELECT
+            p.trade_date,
+            i.ticker,
+
+            LN(
+                p.close_price
+                /
+                LAG(p.close_price) OVER (
+                    PARTITION BY p.instrument_id
+                    ORDER BY p.trade_date
+                )
+            ) AS log_return
+
+        FROM encoredb.equity_daily_prices p
+
+        JOIN encoredb.instruments i
+          ON p.instrument_id = i.instrument_id
+
+        WHERE p.trade_date >= DATE '2026-01-30'
+
+    ),
+
+    daily_index_return AS (
+
+        SELECT
+            r.trade_date,
+
+            SUM(
+                (w.ndx_weight_pct / 100.0)
+                * r.log_return
+            ) AS index_log_return
+
+        FROM price_returns r
+
+        JOIN encoredb.ndx_weights_snapshot w
+          ON w.ticker = r.ticker
+         AND w.snapshot_date = r.trade_date
+
+        WHERE r.log_return IS NOT NULL
+
+        GROUP BY r.trade_date
+
+    )
+
+    SELECT
+        SUM(index_log_return) AS total_log_return
+    FROM daily_index_return
+    """
+
+    with get_conn() as conn:
+        df = pd.read_sql(sql, conn)
+
+    if df.empty:
+        return None
+
+    total_log_return = df.iloc[0]["total_log_return"]
+
+    import numpy as np
+
+    return (
+        np.exp(total_log_return) - 1
+    ) * 100
     
 # --------------------------------------------------
 # LOAD DATA
@@ -125,6 +194,7 @@ df = load_market_state(snapshot_date)
 positions = load_positions()
 nq_index_level = load_nq_index_level()
 official_ndx_ytd = load_official_ndx_ytd()
+chain_linked_ndx = load_chain_linked_return()
 
 # --------------------------------------------------
 # MERGE REAL POSITIONS
@@ -594,9 +664,21 @@ st.divider()
 
 st.subheader("📈 Market Performance")
 
-st.metric(
+m1, m2, m3 = st.columns(3)
+
+m1.metric(
     "Official Nasdaq-100 YTD Return",
     f"{official_ndx_ytd:.1f}%"
+)
+
+m2.metric(
+    "Historical Chain-Linked Return",
+    f"{chain_linked_ndx:.1f}%"
+)
+
+m3.metric(
+    "Current Weight Decomposition",
+    f"{total_product:.1f}%"
 )
 
 semi_product = semi_weight * semi_return / 100
@@ -647,15 +729,11 @@ st.caption(
 )
 
 st.caption(
-    "Contribution scores are calculated as "
-    "current NDX weight × YTD return. "
-    "These are leadership diagnostics and "
-    "do not represent official Nasdaq attribution."
-)
-
-st.caption(
     "Methodology Note: "
-    "Returns are calculated using current Nasdaq-100 constituent weights rather than market-cap weights or historical constituent weights. "
+    "Current Weight Decomposition uses today's Nasdaq-100 "
+    "weights multiplied by constituent YTD returns. "
+    "Historical Chain-Linked Return uses historical daily "
+    "weights and daily stock returns from 30-Jan-2026 onwards."
 )
 
 # --------------------------------------------------
