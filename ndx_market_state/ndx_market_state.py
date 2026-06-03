@@ -232,7 +232,16 @@ def load_historical_attribution():
           ON w.ticker = r.ticker
          AND w.snapshot_date = r.trade_date
 
-        JOIN encoredb.v_index_canonical_market_state_enriched m
+        JOIN (
+        
+            SELECT DISTINCT
+                ticker,
+                cohort_name
+        
+            FROM encoredb.v_index_canonical_market_state_enriched
+        
+        ) m
+        
           ON m.ticker = r.ticker
 
         WHERE r.log_return IS NOT NULL
