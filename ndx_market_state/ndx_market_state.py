@@ -831,6 +831,7 @@ hist_attr["share_of_return"] = (
     / total_hist_return
 ) * 100
 
+# Put semis first
 hist_attr["sort_order"] = hist_attr["grp"].map({
     "Semiconductors": 1,
     "Non-Semiconductors": 2
@@ -838,10 +839,27 @@ hist_attr["sort_order"] = hist_attr["grp"].map({
 
 hist_attr = hist_attr.sort_values("sort_order")
 
+# Keep only display columns
+hist_attr = hist_attr[
+    [
+        "grp",
+        "historical_return",
+        "share_of_return"
+    ]
+]
+
+# Friendly names
+hist_attr = hist_attr.rename(columns={
+    "grp": "Group",
+    "historical_return": "Historical Contribution (%)",
+    "share_of_return": "Share of Historical Return (%)"
+})
+
+# Add total row
 total_row = pd.DataFrame({
-    "grp": ["Total"],
-    "historical_return": [total_hist_return],
-    "share_of_return": [100.0]
+    "Group": ["Total"],
+    "Historical Contribution (%)": [total_hist_return],
+    "Share of Historical Return (%)": [100.0]
 })
 
 hist_attr = pd.concat(
@@ -851,23 +869,13 @@ hist_attr = pd.concat(
 
 st.subheader("📈 Historical Performance Attribution")
 
-
 st.dataframe(
-    hist_attr = hist_attr[
-        [
-            "grp",
-            "historical_return",
-            "share_of_return"
-        ]
-    ]
-    
-    hist_attr = hist_attr.rename(columns={
-        "grp": "Group",
-        "historical_return": "Historical Contribution (%)",
-        "share_of_return": "Share of Historical Return (%)"
+    hist_attr.style.format({
+        "Historical Contribution (%)": "{:.2f}",
+        "Share of Historical Return (%)": "{:.1f}"
     }),
-        use_container_width=True
-    )
+    use_container_width=True
+)
 
 st.caption(
     "Uses daily constituent weights and daily stock returns "
