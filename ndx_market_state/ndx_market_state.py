@@ -875,7 +875,7 @@ st.subheader("📈 Historical Performance Attribution")
 
 st.dataframe(
     hist_attr.style.format({
-        "Historical Contribution (%)": "{:.2f}",
+        "Historical Contribution (%)": "{:.1f}",
         "Share of Historical Return (%)": "{:.1f}"
     }),
     use_container_width=True
@@ -885,6 +885,8 @@ st.caption(
     "Uses daily constituent weights and daily stock returns "
     "from 30-Jan-2026 onwards. Values reconcile to the "
     "Historical Chain-Linked Return metric."
+    "Historical contributions are calculated independently by cohort;"
+    "due to compounding, contributions may not sum exactly to the total Historical Chain-Linked Return."
 )
 
 # --------------------------------------------------
