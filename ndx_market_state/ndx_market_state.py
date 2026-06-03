@@ -824,11 +824,13 @@ hist_attr["historical_return"] = (
     np.exp(hist_attr["total_log_return"]) - 1
 ) * 100
 
-total_hist_return = chain_linked_ndx
+component_total = (
+    hist_attr["historical_return"].sum()
+)
 
 hist_attr["share_of_return"] = (
     hist_attr["historical_return"]
-    / total_hist_return
+    / component_total
 ) * 100
 
 # Put semis first
