@@ -828,6 +828,8 @@ component_total = (
     hist_attr["historical_return"].sum()
 )
 
+total_hist_return = chain_linked_ndx
+
 hist_attr["share_of_return"] = (
     hist_attr["historical_return"]
     / component_total
