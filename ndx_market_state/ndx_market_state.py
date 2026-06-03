@@ -184,7 +184,73 @@ def load_chain_linked_return():
     return (
         np.exp(total_log_return) - 1
     ) * 100
-    
+
+@st.cache_data(ttl=300)
+def load_historical_attribution():
+
+    sql = """
+    WITH price_returns AS (
+
+        SELECT
+            p.trade_date,
+            i.ticker,
+
+            LN(
+                p.close_price
+                /
+                LAG(p.close_price) OVER (
+                    PARTITION BY p.instrument_id
+                    ORDER BY p.trade_date
+                )
+            ) AS log_return
+
+        FROM encoredb.equity_daily_prices p
+
+        JOIN encoredb.instruments i
+          ON p.instrument_id = i.instrument_id
+
+        WHERE p.trade_date >= DATE '2026-01-30'
+
+    ),
+
+    weighted_returns AS (
+
+        SELECT
+
+            CASE
+                WHEN m.cohort_name = 'Semiconductors'
+                    THEN 'Semiconductors'
+                ELSE 'Non-Semiconductors'
+            END AS grp,
+
+            (w.ndx_weight_pct / 100.0)
+            * r.log_return AS weighted_log_return
+
+        FROM price_returns r
+
+        JOIN encoredb.ndx_weights_snapshot w
+          ON w.ticker = r.ticker
+         AND w.snapshot_date = r.trade_date
+
+        JOIN encoredb.v_index_canonical_market_state_enriched m
+          ON m.ticker = r.ticker
+
+        WHERE r.log_return IS NOT NULL
+
+    )
+
+    SELECT
+        grp,
+        SUM(weighted_log_return) AS total_log_return
+
+    FROM weighted_returns
+
+    GROUP BY grp
+    """
+
+    with get_conn() as conn:
+        return pd.read_sql(sql, conn)
+        
 # --------------------------------------------------
 # LOAD DATA
 # --------------------------------------------------
@@ -195,6 +261,7 @@ positions = load_positions()
 nq_index_level = load_nq_index_level()
 official_ndx_ytd = load_official_ndx_ytd()
 chain_linked_ndx = load_chain_linked_return()
+historical_attr = load_historical_attribution()
 
 # --------------------------------------------------
 # MERGE REAL POSITIONS
@@ -734,6 +801,56 @@ st.caption(
     "weights multiplied by constituent YTD returns. "
     "Historical Chain-Linked Return uses historical daily "
     "weights and daily stock returns from 30-Jan-2026 onwards."
+)
+
+# ---------------------------------------------
+# HISTORICAL PERFORMANCE ATTRIBUTION
+# ---------------------------------------------
+
+import numpy as np
+
+hist_attr = historical_attr.copy()
+
+hist_attr["historical_return"] = (
+    np.exp(hist_attr["total_log_return"]) - 1
+) * 100
+
+total_hist_return = hist_attr["historical_return"].sum()
+
+hist_attr["share_of_return"] = (
+    hist_attr["historical_return"]
+    / total_hist_return
+) * 100
+
+total_row = pd.DataFrame({
+    "grp": ["Total"],
+    "historical_return": [total_hist_return],
+    "share_of_return": [100.0]
+})
+
+hist_attr = pd.concat(
+    [hist_attr, total_row],
+    ignore_index=True
+)
+
+st.subheader("📈 Historical Performance Attribution")
+
+st.dataframe(
+    hist_attr.rename(columns={
+        "grp": "Group",
+        "historical_return": "Historical Contribution (%)",
+        "share_of_return": "Share of Historical Return (%)"
+    }).style.format({
+        "Historical Contribution (%)": "{:.2f}",
+        "Share of Historical Return (%)": "{:.1f}"
+    }),
+    use_container_width=True
+)
+
+st.caption(
+    "Uses daily constituent weights and daily stock returns "
+    "from 30-Jan-2026 onwards. Values reconcile to the "
+    "Historical Chain-Linked Return metric."
 )
 
 # --------------------------------------------------
