@@ -664,6 +664,11 @@ st.divider()
 
 st.subheader("📈 Market Performance")
 
+semi_product = semi_weight * semi_return / 100
+other_product = other_weight * other_return / 100
+
+total_product = semi_product + other_product
+
 m1, m2, m3 = st.columns(3)
 
 m1.metric(
@@ -680,11 +685,6 @@ m3.metric(
     "Current Weight Decomposition",
     f"{total_product:.1f}%"
 )
-
-semi_product = semi_weight * semi_return / 100
-other_product = other_weight * other_return / 100
-
-total_product = semi_product + other_product
 
 market_perf = pd.DataFrame({
     "Group": [
