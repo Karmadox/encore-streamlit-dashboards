@@ -96,7 +96,6 @@ st.markdown(
 # DATABASE CONNECTION
 # =========================================================
 
-@st.cache_resource
 def get_conn():
 
     return psycopg2.connect(
@@ -113,8 +112,6 @@ def get_conn():
 
 @st.cache_data(ttl=300)
 def load_data():
-
-    conn = get_conn()
 
     sql = """
 
@@ -152,11 +149,12 @@ def load_data():
 
     """
 
-    df = pd.read_sql(sql, conn)
+    with get_conn() as conn:
+
+        df = pd.read_sql(sql, conn)
 
     return df
-
-
+    
 df = load_data()
 
 # =========================================================
