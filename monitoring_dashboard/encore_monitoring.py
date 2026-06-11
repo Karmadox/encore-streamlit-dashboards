@@ -207,8 +207,7 @@ def load_encore_universe():
             c.cohort_name   AS cohort,
             i.ticker,
             i.name,
-            w.weight_pct,
-            w.is_primary
+            w.weight_pct
         FROM encoredb.instrument_cohort_weights_current w
         JOIN encoredb.instruments i
           ON i.instrument_id = w.instrument_id
@@ -220,7 +219,6 @@ def load_encore_universe():
         ORDER BY
             s.sector_name,
             c.cohort_name,
-            w.is_primary DESC,
             w.weight_pct DESC,
             i.ticker;
     """
