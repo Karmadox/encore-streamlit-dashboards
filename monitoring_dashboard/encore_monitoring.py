@@ -226,8 +226,6 @@ def load_encore_universe():
     with get_conn() as conn:
         df = pd.read_sql(sql, conn)
 
-    df["is_primary"] = df["is_primary"].fillna(False).astype(bool)
-
     return df
     
 # --------------------------------------------------
