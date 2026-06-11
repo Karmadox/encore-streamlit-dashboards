@@ -198,6 +198,43 @@ def load_security_master_issues():
     with get_conn() as conn:
         return pd.read_sql(sql, conn)
 
+@st.cache_data(ttl=300)
+def load_encore_universe():
+
+    sql = """
+        WITH latest_weights AS (
+            SELECT w.*
+            FROM encoredb.instrument_cohort_weights w
+            JOIN (
+                SELECT cohort_id, MAX(effective_date) AS max_date
+                FROM encoredb.instrument_cohort_weights
+                GROUP BY cohort_id
+            ) lw
+              ON lw.cohort_id = w.cohort_id
+             AND lw.max_date = w.effective_date
+        )
+
+        SELECT
+            s.sector_name      AS sector,
+            c.cohort_name      AS cohort,
+            i.ticker,
+            i.name,
+            w.weight_pct,
+            w.is_primary
+        FROM latest_weights w
+        JOIN encoredb.instruments i
+          ON i.instrument_id = w.instrument_id
+        JOIN encoredb.cohorts c
+          ON c.cohort_id = w.cohort_id
+        JOIN encoredb.sectors s
+          ON s.sector_id = c.sector_id
+        WHERE i.active_flag = TRUE
+        ORDER BY s.sector_name, c.cohort_name, w.is_primary DESC, w.weight_pct DESC;
+    """
+
+    with get_conn() as conn:
+        return pd.read_sql(sql, conn)
+
 # --------------------------------------------------
 # ENTERPRISE TASK MONITORING
 # --------------------------------------------------
@@ -350,6 +387,28 @@ with tabs[1]:
         else:
             st.dataframe(instruments, use_container_width=True)
 
+    # --------------------------------------------------
+    # DOWNLOAD ENCORE UNIVERSE
+    # --------------------------------------------------
+
+    st.markdown("---")
+    st.subheader("📥 Export")
+
+    universe_df = load_encore_universe()
+
+    if not universe_df.empty:
+
+        csv_data = universe_df.to_csv(index=False).encode("utf-8")
+
+        st.download_button(
+            label="⬇ Download Encore Universe",
+            data=csv_data,
+            file_name=f"encore_universe_{date.today().isoformat()}.csv",
+            mime="text/csv"
+        )
+    else:
+        st.info("Universe currently empty.")
+        
 # --------------------------------------------------
 # TAB 3
 # --------------------------------------------------
