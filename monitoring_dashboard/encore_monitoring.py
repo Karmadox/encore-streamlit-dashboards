@@ -202,22 +202,6 @@ def load_security_master_issues():
 def load_encore_universe():
 
     sql = """
-        WITH latest_dates AS (
-            SELECT
-                cohort_id,
-                MAX(effective_date) AS max_date
-            FROM encoredb.instrument_cohort_weights
-            GROUP BY cohort_id
-        ),
-
-        latest_weights AS (
-            SELECT w.*
-            FROM encoredb.instrument_cohort_weights w
-            JOIN latest_dates ld
-              ON w.cohort_id = ld.cohort_id
-             AND w.effective_date = ld.max_date
-        )
-
         SELECT
             s.sector_name   AS sector,
             c.cohort_name   AS cohort,
@@ -225,7 +209,7 @@ def load_encore_universe():
             i.name,
             w.weight_pct,
             w.is_primary
-        FROM latest_weights w
+        FROM encoredb.instrument_cohort_weights_current w
         JOIN encoredb.instruments i
           ON i.instrument_id = w.instrument_id
         JOIN encoredb.cohorts c
@@ -244,12 +228,10 @@ def load_encore_universe():
     with get_conn() as conn:
         df = pd.read_sql(sql, conn)
 
-    # Safety: ensure proper types
-    if "is_primary" in df.columns:
-        df["is_primary"] = df["is_primary"].fillna(False).astype(bool)
+    df["is_primary"] = df["is_primary"].fillna(False).astype(bool)
 
     return df
-
+    
 # --------------------------------------------------
 # ENTERPRISE TASK MONITORING
 # --------------------------------------------------
