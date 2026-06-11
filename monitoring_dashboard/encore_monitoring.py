@@ -202,21 +202,25 @@ def load_security_master_issues():
 def load_encore_universe():
 
     sql = """
-        WITH latest_weights AS (
+        WITH latest_dates AS (
+            SELECT
+                cohort_id,
+                MAX(effective_date) AS max_date
+            FROM encoredb.instrument_cohort_weights
+            GROUP BY cohort_id
+        ),
+
+        latest_weights AS (
             SELECT w.*
             FROM encoredb.instrument_cohort_weights w
-            JOIN (
-                SELECT cohort_id, MAX(effective_date) AS max_date
-                FROM encoredb.instrument_cohort_weights
-                GROUP BY cohort_id
-            ) lw
-              ON lw.cohort_id = w.cohort_id
-             AND lw.max_date = w.effective_date
+            JOIN latest_dates ld
+              ON w.cohort_id = ld.cohort_id
+             AND w.effective_date = ld.max_date
         )
 
         SELECT
-            s.sector_name      AS sector,
-            c.cohort_name      AS cohort,
+            s.sector_name   AS sector,
+            c.cohort_name   AS cohort,
             i.ticker,
             i.name,
             w.weight_pct,
@@ -229,11 +233,22 @@ def load_encore_universe():
         JOIN encoredb.sectors s
           ON s.sector_id = c.sector_id
         WHERE i.active_flag = TRUE
-        ORDER BY s.sector_name, c.cohort_name, w.is_primary DESC, w.weight_pct DESC;
+        ORDER BY
+            s.sector_name,
+            c.cohort_name,
+            w.is_primary DESC,
+            w.weight_pct DESC,
+            i.ticker;
     """
 
     with get_conn() as conn:
-        return pd.read_sql(sql, conn)
+        df = pd.read_sql(sql, conn)
+
+    # Safety: ensure proper types
+    if "is_primary" in df.columns:
+        df["is_primary"] = df["is_primary"].fillna(False).astype(bool)
+
+    return df
 
 # --------------------------------------------------
 # ENTERPRISE TASK MONITORING
