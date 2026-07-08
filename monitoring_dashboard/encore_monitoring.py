@@ -271,13 +271,8 @@ def load_task_status():
         return df
 
     for col in ["run_start", "run_end", "last_run_time", "next_run_time"]:
-        df[col] = pd.to_datetime(df[col], errors="coerce")
-        df[col] = (
-            df[col]
-            .dt.tz_localize("America/Chicago", nonexistent="NaT", ambiguous="NaT")
-            .dt.tz_convert("UTC")
-        )
-
+    df[col] = pd.to_datetime(df[col], errors="coerce")
+    
     now = pd.Timestamp.utcnow()
 
     def health(row):
@@ -411,6 +406,7 @@ with tabs[2]:
     st.subheader("🖥 Windows Task Monitoring")
 
     tasks = load_task_status()
+    st.write(tasks)
 
     if tasks.empty:
         st.warning("No task executions found.")
