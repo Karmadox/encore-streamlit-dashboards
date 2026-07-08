@@ -273,7 +273,7 @@ def load_task_status():
     for col in ["run_start", "run_end", "last_run_time", "next_run_time"]:
         df[col] = pd.to_datetime(df[col], errors="coerce")
     
-    now = pd.Timestamp.utcnow()
+    now = pd.Timestamp.now()
 
     def health(row):
 
