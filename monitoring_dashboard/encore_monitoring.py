@@ -406,7 +406,6 @@ with tabs[2]:
     st.subheader("🖥 Windows Task Monitoring")
 
     tasks = load_task_status()
-    st.write(tasks)
 
     if tasks.empty:
         st.warning("No task executions found.")
