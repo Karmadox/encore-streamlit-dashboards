@@ -271,7 +271,7 @@ def load_task_status():
         return df
 
     for col in ["run_start", "run_end", "last_run_time", "next_run_time"]:
-    df[col] = pd.to_datetime(df[col], errors="coerce")
+        df[col] = pd.to_datetime(df[col], errors="coerce")
     
     now = pd.Timestamp.utcnow()
 
