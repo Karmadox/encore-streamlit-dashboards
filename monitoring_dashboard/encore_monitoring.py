@@ -272,8 +272,13 @@ def load_task_status():
 
     for col in ["run_start", "run_end", "last_run_time", "next_run_time"]:
         df[col] = pd.to_datetime(df[col], errors="coerce")
-    
-    now = pd.Timestamp.now()
+        df[col] = (
+            df[col]
+            .dt.tz_localize("America/Chicago", nonexistent="NaT", ambiguous="NaT")
+            .dt.tz_convert("UTC")
+        )
+
+    now = pd.Timestamp.utcnow()
 
     def health(row):
 
