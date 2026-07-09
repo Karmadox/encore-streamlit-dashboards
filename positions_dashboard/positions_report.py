@@ -1407,3 +1407,59 @@ elif active_tab == "📊 52W Regime Monitor":
 
     highs = detail[detail["near_52w_high"]]
     lows  = detail[detail["near_52w_low"]]
+
+    st.divider()
+
+    col1, col2 = st.columns(2)
+    
+    with col1:
+    
+        st.subheader("🟢 Holdings Near 52W High")
+    
+        if highs.empty:
+            st.info("No holdings within 5% of their 52-week high.")
+        else:
+            st.dataframe(
+                highs[
+                    [
+                        "ticker",
+                        "gross_notional",
+                        "current_price",
+                        "high_52w",
+                        "pct_from_52w_high",
+                    ]
+                ].rename(columns={
+                    "ticker": "Ticker",
+                    "gross_notional": "Gross Notional",
+                    "current_price": "Current",
+                    "high_52w": "52W High",
+                    "pct_from_52w_high": "% From High",
+                }),
+                use_container_width=True,
+            )
+    
+    with col2:
+    
+        st.subheader("🔴 Holdings Near 52W Low")
+    
+        if lows.empty:
+            st.info("No holdings within 5% of their 52-week low.")
+        else:
+            st.dataframe(
+                lows[
+                    [
+                        "ticker",
+                        "gross_notional",
+                        "current_price",
+                        "low_52w",
+                        "pct_from_52w_low",
+                    ]
+                ].rename(columns={
+                    "ticker": "Ticker",
+                    "gross_notional": "Gross Notional",
+                    "current_price": "Current",
+                    "low_52w": "52W Low",
+                    "pct_from_52w_low": "% From Low",
+                }),
+                use_container_width=True,
+            )
