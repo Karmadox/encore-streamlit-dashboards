@@ -119,6 +119,19 @@ def load_regime_history():
         return pd.read_sql(sql, conn)
 
 @st.cache_data(ttl=300)
+def load_regime_detail(snapshot_date):
+
+    sql = """
+        SELECT *
+        FROM encoredb.portfolio_52w_regime_detail
+        WHERE snapshot_date=%s
+        ORDER BY gross_notional DESC
+    """
+
+    with get_conn() as conn:
+        return pd.read_sql(sql, conn, params=(snapshot_date,))
+
+@st.cache_data(ttl=300)
 def load_available_dates():
     sql = """
         SELECT DISTINCT snapshot_date
@@ -1389,3 +1402,8 @@ elif active_tab == "📊 52W Regime Monitor":
     )
 
     st.dataframe(latest_table, width="stretch")
+
+    detail = load_regime_detail(latest["snapshot_date"])
+
+    highs = detail[detail["near_52w_high"]]
+    lows  = detail[detail["near_52w_low"]]
