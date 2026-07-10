@@ -127,11 +127,33 @@ st.subheader("📈 Daily Factor Attribution")
 start_date = st.date_input("Start Date", pd.to_datetime("2026-01-01"))
 
 attrib = run_query(f"""
-SELECT *
-FROM encoredb.portfolio_factor_pnl_attribution
-WHERE date >= '{start_date}'
-ORDER BY date DESC
+SELECT
+    a.*,
+    COALESCE(l.factor_type,'Unknown') AS factor_type
+FROM encoredb.portfolio_factor_pnl_attribution a
+LEFT JOIN encoredb.factor_type_lookup l
+    ON a.model_name = l.model_name
+   AND a.factor_name = l.factor_name
+WHERE a.date >= '{start_date}'
+ORDER BY
+    a.date DESC,
+    l.factor_type,
+    a.factor_name
 """)
+
+factor_types = ["All"] + sorted(
+    attrib["factor_type"].dropna().unique().tolist()
+)
+
+selected_factor = st.selectbox(
+    "Filter by Factor Type",
+    factor_types,
+)
+
+if selected_factor != "All":
+    attrib = attrib[
+        attrib["factor_type"] == selected_factor
+    ]
 
 st.dataframe(attrib, use_container_width=True)
 
