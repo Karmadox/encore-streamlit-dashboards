@@ -195,20 +195,7 @@ def _format_table(df):
     if df.empty:
         return df
 
-    fmt = {}
-
-    if "Spot" in df.columns:
-        fmt["Spot"] = lambda v: f"${v:,.2f}" if pd.notna(v) else "—"
-
-    for c in ("GEX (total)", "GEX (calls)", "GEX (puts)"):
-        if c in df.columns:
-            fmt[c] = _gex_dollar_M
-
-    for c in ("Strikes", "Expiries"):
-        if c in df.columns:
-            fmt[c] = lambda v: f"{int(v)}" if pd.notna(v) else "—"
-
-    return df.style.format(fmt)
+    return df
 
 @st.cache_data(ttl=300)
 def load_regimes():
