@@ -42,6 +42,14 @@ st.set_page_config(
     layout="wide",
 )
 
+import streamlit as st
+import pandas as pd
+import pyarrow
+
+st.write("Streamlit:", st.__version__)
+st.write("Pandas:", pd.__version__)
+st.write("PyArrow:", pyarrow.__version__)
+
 # -------------------------------------------------
 # DB CONNECTION
 # -------------------------------------------------
