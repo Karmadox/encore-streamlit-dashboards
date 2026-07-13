@@ -457,5 +457,23 @@ This dashboard shows:
 > **Where dealer positioning and historical analogs suggest earnings moves may be amplified, suppressed — or mispriced — and how much confidence to place in that signal.**
 """)
     
+# -------------------------------------------------
+# SECTION 1
+# -------------------------------------------------
+
+st.markdown("## 🎯 Selected Day — Names Reporting + Dealer Gamma")
+
+default_date = upcoming[0] if upcoming else past[0]
+
+sel_date = st.selectbox(
+    "Earnings date",
+    options=upcoming + past,
+    index=(upcoming + past).index(default_date),
+)
+
+show_all = st.toggle("Show names without GEX", value=False)
+
+names = load_names_for_date(sel_date)
+merged = _enrich_with_panel(names, panel, sel_date)
 
 
