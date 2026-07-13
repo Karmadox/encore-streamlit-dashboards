@@ -497,6 +497,8 @@ else:
         regime = "Long Gamma" if agg > 0 else "Short Gamma"
         c3.metric("Aggregate GEX", _gex_dollar_M(agg), delta=regime)
 
-    table = _gex_table(merged)
-    
+    st.write(table.dtypes)
+    st.write(table.shape)
     st.write(table.head())
+    table = _gex_table(merged)
+
