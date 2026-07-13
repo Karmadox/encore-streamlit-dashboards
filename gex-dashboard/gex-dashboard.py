@@ -457,50 +457,5 @@ This dashboard shows:
 > **Where dealer positioning and historical analogs suggest earnings moves may be amplified, suppressed — or mispriced — and how much confidence to place in that signal.**
 """)
     
-# -------------------------------------------------
-# SECTION 1
-# -------------------------------------------------
 
-st.markdown("## 🎯 Selected Day — Names Reporting + Dealer Gamma")
-
-default_date = upcoming[0] if upcoming else past[0]
-
-sel_date = st.selectbox(
-    "Earnings date",
-    options=upcoming + past,
-    index=(upcoming + past).index(default_date),
-)
-
-show_all = st.toggle("Show names without GEX", value=False)
-
-names = load_names_for_date(sel_date)
-merged = _enrich_with_panel(names, panel, sel_date)
-
-if names.empty:
-    st.info(f"No names for {sel_date}")
-else:
-
-    n_with_gex = merged["gex"].notna().sum()
-
-    if not show_all:
-        merged = merged[merged["gex"].notna()]
-
-    c1, c2, c3 = st.columns(3)
-
-    coverage = (n_with_gex / len(names)) if len(names) > 0 else 0
-
-    c1.metric("Names reporting", len(names))
-    c2.metric("With GEX", f"{n_with_gex}/{len(names)}", delta=f"{coverage:.0%}")
-
-    if n_with_gex > 0:
-        agg = merged["gex"].sum()
-        regime = "Long Gamma" if agg > 0 else "Short Gamma"
-        c3.metric("Aggregate GEX", _gex_dollar_M(agg), delta=regime)
-
-    table = _gex_table(merged)
-
-    st.dataframe(
-        table,
-        use_container_width=True
-    )
 
