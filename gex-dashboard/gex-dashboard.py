@@ -498,5 +498,4 @@ else:
         c3.metric("Aggregate GEX", _gex_dollar_M(agg), delta=regime)
 
     table = _gex_table(merged)
-    table = table.drop(columns=["dealer γ"])
-    st.dataframe(table)
+
