@@ -500,27 +500,6 @@ else:
     st.dataframe(_format_table(_gex_table(merged)), use_container_width=True)
 
 # -------------------------------------------------
-# SECTION 2
-# -------------------------------------------------
-
-st.markdown("## 📅 Upcoming Earnings — GEX Reads")
-
-rows = []
-
-for d in upcoming[:7]:
-    n = load_names_for_date(d)
-    if not n.empty:
-        rows.append(_enrich_with_panel(n.assign(earnings_date=d), panel, d))
-
-df_up = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
-
-if not df_up.empty and "gex" in df_up.columns:
-    if not show_all:
-        df_up = df_up[df_up["gex"].notna()]
-
-st.dataframe(_format_table(_gex_table(df_up, show_event_date=True)), use_container_width=True)
-
-# -------------------------------------------------
 # SECTION 3 — Recent Earnings (🔥 FIXED PROPERLY)
 # -------------------------------------------------
 
