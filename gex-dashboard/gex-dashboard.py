@@ -499,8 +499,6 @@ else:
 
     table = _gex_table(merged)
 
-    st.write(table.columns.tolist())
-    st.write(table.dtypes.astype(str).to_dict())
-    st.write(table.shape)
-    st.write(table.head())
-
+    table = table.drop(columns=["dealer γ"])
+    
+    st.dataframe(table)
