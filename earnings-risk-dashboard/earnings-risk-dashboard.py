@@ -83,14 +83,6 @@ def format_event_table(df):
 
     return df
 
-
-# =================================================
-# DATE DEFINITIONS
-# =================================================
-
-last_quarter_start = "2026-01-01"
-last_quarter_end   = "2026-03-31"
-
 # =================================================
 # CORE EVENT ENGINE (1D / 1W / 1M / 3M)
 # =================================================
@@ -175,7 +167,8 @@ from event_prices ep
 join encoredb.portfoliohistory pos
     on pos.ticker = ep.ticker
    and pos.date = ep.anchor_date
-where ep.earnings_date between '{last_quarter_start}' and '{last_quarter_end}'
+where ep.earnings_date >= date_trunc('quarter', current_date) - interval '3 months'
+  and ep.earnings_date <  date_trunc('quarter', current_date)
 order by pnl_1m desc
 """
 
