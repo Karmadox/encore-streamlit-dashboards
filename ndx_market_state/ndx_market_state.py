@@ -3,6 +3,14 @@ import pandas as pd
 import psycopg2
 from datetime import date
 
+from market_performance import (
+    chain_linked_return_sql,
+    compounded_return_percent,
+    format_percent,
+    historical_attribution_sql,
+    historical_quality_issues_sql,
+)
+
 # -------------------------------------------------
 # SIMPLE PASSWORD AUTH
 # -------------------------------------------------
@@ -118,147 +126,24 @@ def load_official_ndx_ytd():
 
 @st.cache_data(ttl=300)
 def load_chain_linked_return():
-
-    sql = """
-    WITH price_returns AS (
-
-        SELECT
-            p.trade_date,
-            i.ticker,
-
-            LN(
-                p.close_price
-                /
-                LAG(p.close_price) OVER (
-                    PARTITION BY p.instrument_id
-                    ORDER BY p.trade_date
-                )
-            ) AS log_return
-
-        FROM encoredb.equity_daily_prices p
-
-        JOIN encoredb.instruments i
-          ON p.instrument_id = i.instrument_id
-
-        WHERE p.trade_date >= DATE '2026-01-30'
-
-    ),
-
-    daily_index_return AS (
-
-        SELECT
-            r.trade_date,
-
-            SUM(
-                (w.ndx_weight_pct / 100.0)
-                * r.log_return
-            ) AS index_log_return
-
-        FROM price_returns r
-
-        JOIN encoredb.ndx_weights_snapshot w
-          ON w.ticker = r.ticker
-         AND w.snapshot_date = r.trade_date
-
-        WHERE r.log_return IS NOT NULL
-
-        GROUP BY r.trade_date
-
-    )
-
-    SELECT
-        SUM(index_log_return) AS total_log_return
-    FROM daily_index_return
-    """
-
     with get_conn() as conn:
-        df = pd.read_sql(sql, conn)
+        df = pd.read_sql(chain_linked_return_sql(), conn)
 
     if df.empty:
         return None
 
-    total_log_return = df.iloc[0]["total_log_return"]
-
-    import numpy as np
-
-    return (
-        np.exp(total_log_return) - 1
-    ) * 100
+    return compounded_return_percent(df.iloc[0]["total_log_return"])
 
 @st.cache_data(ttl=300)
 def load_historical_attribution():
-
-    sql = """
-    WITH price_returns AS (
-
-        SELECT
-            p.trade_date,
-            i.ticker,
-
-            LN(
-                p.close_price
-                /
-                LAG(p.close_price) OVER (
-                    PARTITION BY p.instrument_id
-                    ORDER BY p.trade_date
-                )
-            ) AS log_return
-
-        FROM encoredb.equity_daily_prices p
-
-        JOIN encoredb.instruments i
-          ON p.instrument_id = i.instrument_id
-
-        WHERE p.trade_date >= DATE '2026-01-30'
-
-    ),
-
-    weighted_returns AS (
-
-        SELECT
-
-            CASE
-                WHEN m.cohort_name = 'Semiconductors'
-                    THEN 'Semiconductors'
-                ELSE 'Non-Semiconductors'
-            END AS grp,
-
-            (w.ndx_weight_pct / 100.0)
-            * r.log_return AS weighted_log_return
-
-        FROM price_returns r
-
-        JOIN encoredb.ndx_weights_snapshot w
-          ON w.ticker = r.ticker
-         AND w.snapshot_date = r.trade_date
-
-        JOIN (
-        
-            SELECT DISTINCT
-                ticker,
-                cohort_name
-        
-            FROM encoredb.v_index_canonical_market_state_enriched
-        
-        ) m
-        
-          ON m.ticker = r.ticker
-
-        WHERE r.log_return IS NOT NULL
-
-    )
-
-    SELECT
-        grp,
-        SUM(weighted_log_return) AS total_log_return
-
-    FROM weighted_returns
-
-    GROUP BY grp
-    """
-
     with get_conn() as conn:
-        return pd.read_sql(sql, conn)
+        return pd.read_sql(historical_attribution_sql(), conn)
+
+
+@st.cache_data(ttl=300)
+def load_historical_return_quality_issues():
+    with get_conn() as conn:
+        return pd.read_sql(historical_quality_issues_sql(), conn)
 
 @st.cache_data(ttl=300)
 def load_latest_analyst_revisions():
@@ -348,6 +233,7 @@ nq_index_level = load_nq_index_level()
 official_ndx_ytd = load_official_ndx_ytd()
 chain_linked_ndx = load_chain_linked_return()
 historical_attr = load_historical_attribution()
+historical_return_issues = load_historical_return_quality_issues()
 
 # --------------------------------------------------
 # MERGE REAL POSITIONS
@@ -852,13 +738,31 @@ with tabs[0]:
     
     m2.metric(
         "Historical Chain-Linked Return",
-        f"{chain_linked_ndx:.1f}%"
+        format_percent(chain_linked_ndx)
     )
     
     m3.metric(
         "Current Weight Decomposition",
         f"{total_product:.1f}%"
     )
+
+    if not historical_return_issues.empty:
+        issue_tickers = ", ".join(
+            sorted(historical_return_issues["ticker"].dropna().unique())
+        )
+        st.warning(
+            "Historical return calculations excluded "
+            f"{len(historical_return_issues)} invalid weighted observation(s)"
+            + (f" affecting: {issue_tickers}." if issue_tickers else ".")
+        )
+        with st.expander("Inspect excluded historical observations"):
+            st.dataframe(historical_return_issues, use_container_width=True)
+
+    if chain_linked_ndx is None:
+        st.error(
+            "Historical Chain-Linked Return is unavailable because no finite "
+            "aggregate could be calculated from the eligible observations."
+        )
     
     market_perf = pd.DataFrame({
         "Group": [
@@ -914,13 +818,13 @@ with tabs[0]:
     # HISTORICAL PERFORMANCE ATTRIBUTION
     # ---------------------------------------------
     
-    import numpy as np
-    
     hist_attr = historical_attr.copy()
-    
-    hist_attr["historical_return"] = (
-        np.exp(hist_attr["total_log_return"]) - 1
-    ) * 100
+
+    hist_attr["historical_return"] = hist_attr["total_log_return"].apply(
+        compounded_return_percent
+    )
+
+    hist_attr = hist_attr[hist_attr["historical_return"].notna()].copy()
     
     component_total = (
         hist_attr["historical_return"].sum()
@@ -928,10 +832,13 @@ with tabs[0]:
     
     total_hist_return = chain_linked_ndx
     
-    hist_attr["share_of_return"] = (
-        hist_attr["historical_return"]
-        / component_total
-    ) * 100
+    if component_total:
+        hist_attr["share_of_return"] = (
+            hist_attr["historical_return"]
+            / component_total
+        ) * 100
+    else:
+        hist_attr["share_of_return"] = None
     
     # Put semis first
     hist_attr["sort_order"] = hist_attr["grp"].map({
