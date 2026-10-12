@@ -1,0 +1,7 @@
+.streamlit/
+*.csv
+*.xlsx
+*.html
+*.gz
+*secrets*
+__pycache__/
