@@ -20,15 +20,14 @@ name=st.session_state.active_stock
 rows=stocks()[name]
 st.subheader(f'Currently showing: {name}')
 st.caption(f'Last saved observation: {rows[-1]["date"]} | {name} PX_LAST: ${float(rows[-1]["close"]):,.2f}. Select a stock and press Update report. This changes the displayed saved data; it does not refresh Bloomberg.')
-st.subheader('How to read this report')
-for label,description in GUIDE:st.markdown(f'**{label}:** {description}')
+with st.expander('How to read this report', expanded=False):
+ for label,description in GUIDE:st.markdown(f'**{label}:** {description}')
 st.subheader(f'{name} — SCFR observations at the latest origin')
 latest,notes=summary(rows)
 st.caption(f'Origin {latest[3]["date"]}; trailing inputs end {latest[3]["latest_input"]}. Price comparison includes the last saved observation. Conditional on the stated assumptions.')
 cols=st.columns(3)
 for col,h in zip(cols,(3,9,27)):col.metric(f'{h}-session total return',f'{float(latest[h]["total"]):.2%}')
 for note in notes:st.write('• '+note)
-st.sidebar.caption('PX_LAST convention accepted for pilot per Rob’s report of Derek’s confirmation. Official auction-close equivalence is not asserted.')
 for file,label,mime in [('Report.html','Download complete report','text/html'),('Features.csv','Download both-stock features','text/csv'),('Assumptions.txt','Download assumptions','text/plain')]:
  st.download_button(label,download(file),file,mime)
 report,evidence,findings=st.tabs(['Stock report','Assumptions and coverage','Observations'])
