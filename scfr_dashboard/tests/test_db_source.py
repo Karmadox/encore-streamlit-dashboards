@@ -21,6 +21,25 @@ class Tests(unittest.TestCase):
  def run_read(self):return read_stock(self.settings,'INTC',date(2026,10,12),lambda **kw:self.c)
  def test_read_and_cleanup(self):
   r=self.run_read();self.assertEqual(r['rows'][0]['close'],'10.5');self.assertIsNone(r['rows'][0]['volume']);self.assertEqual(self.c.cleanup,['rollback','close']);self.assertEqual(len(self.c.sql),7)
+ def test_daily_review_read(self):
+  proof={'version':1,'reviews':{}}
+  def fetchone():
+   q=self.c.sql[-1][0]
+   if 'to_regclass' in q or 'has_table_privilege' in q:return (True,)
+   if 'SELECT review' in q:return (proof,)
+   return self.c.guard
+  self.c.fetchone=fetchone
+  self.assertEqual(self.run_read()['daily_review'],proof)
+  self.assertEqual(self.c.cleanup,['rollback','close'])
+ def test_review_privilege_absent(self):
+  def fetchone():
+   q=self.c.sql[-1][0]
+   if 'to_regclass' in q:return (True,)
+   if 'has_table_privilege' in q:return (False,)
+   return self.c.guard
+  self.c.fetchone=fetchone
+  self.assertIsNone(self.run_read()['daily_review'])
+  self.assertFalse(any('SELECT review' in q for q,p in self.c.sql))
  def test_duplicate_identity(self):
   self.c.identities*=2
   with self.assertRaises(DataUnavailable):self.run_read()
