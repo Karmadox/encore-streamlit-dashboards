@@ -32,4 +32,20 @@ class Returns(unittest.TestCase):
   e=self.evidence();e['sessions']+=['2026-10-12','2026-10-13']
   obs=[{'date':d,'close':'100'} for d in e['sessions']]
   self.assertEqual(calculate(obs,'INTC',e)['end'],'2026-10-12')
+class Narratives(unittest.TestCase):
+ def test_pullback_and_common_endpoint(self):
+  from live_returns import observations
+  from decimal import Decimal
+  panels={h:{'values':[{'total':v,'per_share':v,'rms':Decimal('.02'),'latest_input':'2026-10-09'}],'total_status':{'withheld':False},'per_share_status':{'withheld':False}} for h,v in [(3,Fraction('-0.0693')),(9,Fraction('-0.0976')),(27,Fraction('0.1768'))]}
+  rows=[{'date':'2026-10-08','close':'100','volume':'10'},{'date':'2026-10-09','close':'90','volume':'10'},{'date':'2026-10-12','close':'1000','volume':'1000000'}]
+  notes=observations({'panels':panels,'rows':rows})
+  self.assertIn('pullback',' '.join(notes));self.assertIn('-10.00%',' '.join(notes));self.assertNotIn('1000',' '.join(notes))
+  panels[3]['total_status']['withheld']=True
+  notes=observations({'panels':panels,'rows':rows})
+  self.assertIn('unavailable',notes[0]);self.assertNotIn('**Size of daily moves:**',' '.join(notes))
+ def test_volume_missing_is_not_zero(self):
+  from live_returns import calculate,observations
+  e=Returns().evidence();rows=[{'date':d,'close':'100','volume':'10'} for d in e['sessions']]
+  rows[-2]['volume']=None
+  self.assertIn('volume is missing',' '.join(observations(calculate(rows,'INTC',e))))
 if __name__=='__main__':unittest.main()
