@@ -68,3 +68,9 @@ it does not compute or relabel these as verified total returns or per-share retu
 The reviewed 3/9/27 analysis remains accessible in the snapshot. Completing the
 live analytics requires compatible action evidence and an explicit calendar grid.
 The database view has no snapshot report download, avoiding mixed-source exports.
+
+### Bounded EncoreDB return panels
+
+Append the separately supplied private `[scfr_returns]` section to Streamlit Secrets. It contains `evidence_zlib_base64` and `evidence_sha256`. Do not commit the evidence or secrets to this public repository. Existing `[auth]`, `[db]` and `[scfr]` settings remain in place.
+
+The current evidence supports CHTR, CNC, ELV, HUM, INTC, MOH, T, TMUS, UNH and VZ through 12 October 2026. It is a current-vintage descriptive package with explicitly assumed broader action completeness. CMCSA returns are deferred; DELL, ZTS, CHWY and SPCX retain split-history exceptions. New database dates do not extend return eligibility. Daily-granularity panels show rolling 3/9/27-session total returns and separately labelled per-share price returns, using the existing lag convention. Missing calendar sessions remain in the denominator.
