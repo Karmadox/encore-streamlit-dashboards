@@ -18,7 +18,7 @@ st.caption('2026 through 2 October | Retrospective selected examples | No predic
 if 'active_stock' not in st.session_state:st.session_state.active_stock='INTC'
 with st.form('stock_selection'):
  left,right=st.columns([3,1], vertical_alignment='bottom')
- selected=left.selectbox('Stock',['INTC','DELL'],key='selected_stock')
+ selected=left.selectbox('Stock',['DELL','INTC'],index=['DELL','INTC'].index(st.session_state.active_stock),key='selected_stock')
  submitted=right.form_submit_button('Update report')
 if submitted:st.session_state.active_stock=selected
 name=st.session_state.active_stock

@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 START = date(2024, 10, 1)
 MAX_ROWS = 1600
-STOCKS = ('INTC','DELL','ZTS','CHWY','T','TMUS','CHTR','CMCSA','VZ','SPCX','UNH','HUM','ELV','CNC','MOH')
+STOCKS = tuple(sorted(('INTC','DELL','ZTS','CHWY','T','TMUS','CHTR','CMCSA','VZ','SPCX','UNH','HUM','ELV','CNC','MOH')))
 
 class DataUnavailable(Exception):
     """Public-safe error; never wrap raw driver exceptions for display."""

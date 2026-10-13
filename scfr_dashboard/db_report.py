@@ -18,7 +18,7 @@ def render():
         st.session_state.db_active_stock='INTC'
     with st.form('db_stock_selection'):
         left,right=st.columns([3,1],vertical_alignment='bottom')
-        selected=left.selectbox('Stock',STOCKS,key='db_selected_stock')
+        selected=left.selectbox('Stock',STOCKS,index=STOCKS.index(st.session_state.db_active_stock),key='db_selected_stock')
         update=right.form_submit_button('Update report')
     settings=dict(st.secrets['db'])
     end=completed_day()
