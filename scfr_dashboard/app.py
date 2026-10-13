@@ -3,6 +3,11 @@ st.set_page_config(page_title="SCFR | private review",layout="wide")
 import pandas as pd
 from auth import require_password
 require_password()
+source=st.radio('Report source',['Saved pilot — reviewed snapshot','EncoreDB — current observations'],horizontal=True)
+if source=='EncoreDB — current observations':
+ from db_report import render
+ render()
+ st.stop()
 from build import stocks,panels,ASSUMPTIONS,download
 from model import panel_status
 from reading import GUIDE,summary

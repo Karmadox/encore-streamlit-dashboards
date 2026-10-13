@@ -28,3 +28,43 @@ incorrect passwords expose no data, and both stock selections work after login.
 The shared-password approach follows the other dashboards; it does not provide
 individual reviewer identity or individual revocation. Rotate the secret to
 revoke shared access. Publishing and configuring real secrets remain pending.
+
+## Optional direct EncoreDB view
+
+The Report source selector now separates the reviewed saved pilot from current
+EncoreDB observations. The saved pilot remains the default and is unchanged.
+Database imports and reads occur only after authentication and selection of the
+EncoreDB view. Add the same private `[db]` settings used by the existing dashboards:
+
+```toml
+[db]
+host = "SET_PRIVATELY"
+port = 5432
+dbname = "SET_PRIVATELY"
+user = "SET_PRIVATELY"
+password = "SET_PRIVATELY"
+sslmode = "require"
+```
+
+Keep `[auth]` and the existing `[scfr]` snapshot values. Do not paste credentials
+into source code, issues or chat. The database endpoint must permit connections
+from the Streamlit host; this change does not modify firewall or database grants.
+A read-only transaction is enforced, but does not make an administrative login a
+least-privilege account. Prefer an existing usable read-only credential if one is
+available; no account creation is performed here.
+
+The new view reads only the selected stock from the 15-name allowlist and excludes
+the current New York day. It uses TLS, ten-second connection/statement limits,
+read-only repeatable read, a 1,600-row ceiling, rollback and close. Identity
+ambiguity and validation errors withhold results. No automatic retry is performed.
+Data cache lasts five minutes; Update report evicts the selected stock/date/settings
+cache entry and reads again. No ingestion or vendor request is triggered. Results
+stay server-side except for chart data sent to authenticated viewers. Shared-password
+sessions share the cache. Secrets participate in its key, not its returned value.
+
+This first database view shows stored close and volume observations. Adjustment
+basis, complete session grids and corporate-action coverage remain unresolved;
+it does not compute or relabel these as verified total returns or per-share returns.
+The reviewed 3/9/27 analysis remains accessible in the snapshot. Completing the
+live analytics requires compatible action evidence and an explicit calendar grid.
+The database view has no snapshot report download, avoiding mixed-source exports.
