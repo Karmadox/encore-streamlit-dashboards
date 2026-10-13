@@ -94,8 +94,16 @@ def read_stock(settings, ticker, end=None, connector=None):
                     raise DataUnavailable('Duplicate or invalid observation dates.')
                 rows.append({'date':day.isoformat(),'close':number(close,True),'volume':number(volume)})
                 previous = day
+            daily_review=None
+            cur.execute("SELECT to_regclass('encoredb.scfr_daily_action_review_v1') IS NOT NULL")
+            if cur.fetchone()[0] is True:
+                cur.execute("SELECT has_table_privilege(current_user,'encoredb.scfr_daily_action_review_v1','SELECT')")
+                if cur.fetchone()[0] is True:
+                    cur.execute("SELECT review FROM encoredb.scfr_daily_action_review_v1 ORDER BY created_at DESC LIMIT 1")
+                    review_row=cur.fetchone()
+                    if review_row:daily_review=review_row[0]
             result = {'ticker':ticker,'instrument_id':i,'name':name,'bbg_security':bbg,
-                      'rows':rows,'requested_end':end.isoformat(),
+                      'daily_review':daily_review,'rows':rows,'requested_end':end.isoformat(),
                       'queried_at':datetime.now(timezone.utc).isoformat()}
     except DataUnavailable as exc:
         error = exc

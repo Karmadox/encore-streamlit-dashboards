@@ -73,4 +73,26 @@ The database view has no snapshot report download, avoiding mixed-source exports
 
 Append the separately supplied private `[scfr_returns]` section to Streamlit Secrets. It contains `evidence_zlib_base64` and `evidence_sha256`. Do not commit the evidence or secrets to this public repository. Existing `[auth]`, `[db]` and `[scfr]` settings remain in place.
 
-The current evidence supports CHTR, CNC, ELV, HUM, INTC, MOH, T, TMUS, UNH and VZ through 12 October 2026. It is a current-vintage descriptive package with explicitly assumed broader action completeness. CMCSA returns are deferred; DELL, ZTS, CHWY and SPCX retain split-history exceptions. New database dates do not extend return eligibility. Daily-granularity panels show rolling 3/9/27-session total returns and separately labelled per-share price returns, using the existing lag convention. Missing calendar sessions remain in the denominator.
+The current evidence supports CHTR, CNC, ELV, HUM, INTC, MOH, T, TMUS, UNH and VZ through 12 October 2026. It is a current-vintage descriptive package with explicitly assumed broader action completeness. CMCSA returns are deferred; DELL, ZTS, CHWY and SPCX retain split-history exceptions. New database dates alone do not extend return eligibility. Daily-granularity panels show rolling 3/9/27-session total returns and separately labelled per-share price returns, using the existing lag convention. Missing calendar sessions remain in the denominator.
+
+
+### Daily reconciliation
+
+The existing VM ingestion chain runs price ingestion, volume reconciliation, then
+SCFR action and unadjusted-price reconciliation for the 15-name universe. Full
+vendor results remain in the protected VM directory; a bounded review record is
+stored in `encoredb.scfr_daily_action_review_v1`. The dashboard reads its latest
+record only when its database login has SELECT access. It does not run ingestion.
+
+For the ten enabled return histories, an exact match to the private approved
+cash-event baseline, no returned in-window splits or unsupported events, and
+matching unadjusted prices allow the evidence cutoff to advance. New or revised
+events withhold the affected stock's return panels pending RAW reconciliation;
+they are never silently treated as zero. Price and volume panels remain available.
+If the table is absent or inaccessible, the initial evidence cutoff remains in
+force. A failed daily capture leaves the last successful dated review in place.
+The report displays the reconciliation timestamp and return cutoff. Calendar
+extension is bounded to 31 December 2026 and needs review before 2027.
+
+This is ongoing reconciliation against a retained baseline, not automatic approval
+of new dividend amounts or certification of complete corporate-action coverage.

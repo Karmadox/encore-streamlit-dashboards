@@ -8,7 +8,7 @@ from model import daily
 class Returns(unittest.TestCase):
  def evidence(self):
   sessions=[(date(2025,11,1)+timedelta(days=i)).isoformat() for i in range(80)]
-  return {'sessions':sessions,'stocks':{t:[] for t in SUPPORTED}}
+  return {'end':'2026-10-12','sessions':sessions,'stocks':{t:[] for t in SUPPORTED}}
  def test_cash_on_ex_date(self):
   self.assertEqual(daily('100','99',[('cash','1')]),0)
   self.assertEqual(daily('100','99',[]),Fraction(-1,100))
@@ -48,4 +48,16 @@ class Narratives(unittest.TestCase):
   e=Returns().evidence();rows=[{'date':d,'close':'100','volume':'10'} for d in e['sessions']]
   rows[-2]['volume']=None
   self.assertIn('volume is missing',' '.join(observations(calculate(rows,'INTC',e))))
+class DailyExtension(unittest.TestCase):
+ def test_approved_extension_and_review_hold(self):
+  from live_returns import extend_evidence
+  e={'end':'2026-10-12','sessions':['2026-10-12'],'stocks':{}}
+  r={'version':1,'baseline_hash':'bound','captured_at':'2026-10-13','end':'2026-10-13','reviews':{'INTC':{'status':'READY_NO_NEW_EVENTS','candidate_end':'2026-10-13','reasons':[]}}}
+  extended,note=extend_evidence(e,r,'INTC','bound')
+  self.assertEqual(extended['sessions'],['2026-10-12','2026-10-13']);self.assertEqual(e['end'],'2026-10-12')
+  r['reviews']['INTC']['status']='REVIEW_REQUIRED'
+  with self.assertRaises(EvidenceUnavailable):extend_evidence(e,r,'INTC','bound')
+ def test_binding_refused(self):
+  from live_returns import extend_evidence
+  with self.assertRaises(EvidenceUnavailable):extend_evidence({}, {'version':1,'baseline_hash':'wrong'},'INTC','bound')
 if __name__=='__main__':unittest.main()

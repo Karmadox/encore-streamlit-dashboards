@@ -1,6 +1,6 @@
 """Private, date-bounded action evidence applied to read-only database prices."""
 import base64,hashlib,json,zlib
-from datetime import date
+from datetime import date, timedelta
 from fractions import Fraction
 from model import features,panel_status,SCALES
 
@@ -34,7 +34,7 @@ def calculate(observations,ticker,evidence):
     if ticker not in SUPPORTED:raise EvidenceUnavailable('Return history is not yet enabled for this stock.')
     bydate={r['date']:r for r in observations}
     if len(bydate)!=len(observations):raise EvidenceUnavailable('Duplicate price dates; returns withheld.')
-    end=min(CUTOFF,max(bydate,default='2024-10-01'))
+    end=min(evidence['end'],max(bydate,default='2024-10-01'))
     events={r['ex_date']:r['amount'] for r in evidence['stocks'][ticker]}
     rows=[]
     for day in evidence['sessions']:
@@ -47,6 +47,23 @@ def calculate(observations,ticker,evidence):
         values=[v for v in features(rows,h) if v['date']>='2026-01-01']
         panels[h]={'values':values,'total_status':panel_status([v['total'] for v in values]),'per_share_status':panel_status([v['per_share'] for v in values])}
     return {'end':end,'panels':panels,'rows':rows}
+
+def extend_evidence(evidence,review,ticker,baseline_hash):
+    if review is None:return evidence,'Daily action review not yet available; using the initial evidence cutoff.'
+    try:
+        if review['version']!=1 or review['baseline_hash']!=baseline_hash:raise ValueError()
+        r=review['reviews'][ticker]
+        if r['status']!='READY_NO_NEW_EVENTS':
+            raise EvidenceUnavailable('Daily action reconciliation flagged this stock for review. Return panels are temporarily withheld; prices and volume remain available.')
+        end=date.fromisoformat(r['candidate_end'])
+        if r['reasons'] or r['candidate_end']!=review['end'] or not date(2026,10,12)<=end<=min(date.today(),date(2026,12,31)):raise ValueError()
+        sessions=list(evidence['sessions']);day=date(2026,10,13)
+        while day<=end:
+            if day.weekday()<5 and day.isoformat() not in ('2026-11-26','2026-12-25'):sessions.append(day.isoformat())
+            day+=timedelta(days=1)
+        return {**evidence,'end':end.isoformat(),'sessions':sessions},f'Daily corporate-action and unadjusted-price reconciliation: {review["captured_at"]}. No newly effective or revised events admitted.'
+    except EvidenceUnavailable:raise
+    except Exception:raise EvidenceUnavailable('Daily action-review record is invalid; return panels withheld.') from None
 
 def observations(analysis):
     """Narrative uses the same lagged endpoint and withholding gates as panels."""
@@ -108,9 +125,12 @@ def render(result,settings):
     if settings is None:
         st.info('The owner must add the private return-evidence settings to enable these panels.');return
     try:
-        evidence=load_evidence(settings);analysis=calculate(result['rows'],ticker,evidence)
+        evidence=load_evidence(settings)
+        evidence,daily_note=extend_evidence(evidence,result.get('daily_review'),ticker,settings['evidence_sha256'])
+        analysis=calculate(result['rows'],ticker,evidence)
     except EvidenceUnavailable as exc:
         st.warning(str(exc));return
+    if daily_note:st.caption(daily_note)
     st.caption(f'Return evidence ends {analysis["end"]}. Each plotted origin uses only the preceding completed sessions, ending one session before that origin. Price and volume charts may be newer.')
     latest=[]
     for h,panel in analysis['panels'].items():
@@ -126,7 +146,7 @@ def render(result,settings):
         st.dataframe(pd.DataFrame(latest).style.format({'Total return':'{:.2%}','Per-share price return':'{:.2%}'},na_rep='Unavailable'),hide_index=True,use_container_width=True)
     with st.expander('How to read the returns',expanded=False):
         st.write('Total return includes evidenced cash dividends on ex-date. Per-share price return excludes cash dividends. The window length is 3, 9 or 27 trading sessions; each window is recalculated at every session, so charts retain daily granularity. Daily total returns are rounded half-even to 18 decimal places before compounding. Missing sessions remain missing.')
-        st.write('These are current-vintage descriptive histories. No in-window splits were returned for the enabled stocks. Other corporate-action coverage is not certified. Returns are limited to the reconciled evidence period and do not extend automatically when new database prices arrive.')
+        st.write('These are current-vintage descriptive histories. No in-window splits were returned for the enabled stocks. Other corporate-action coverage is not certified. Returns extend only after daily action and unadjusted-price reconciliation succeeds. New or revised actions hold the affected stock for review.')
     for h,p in analysis['panels'].items():
         st.markdown(f'**{h}-session returns**')
         chart=[]

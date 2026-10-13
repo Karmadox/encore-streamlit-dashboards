@@ -20,7 +20,7 @@ class Tests(unittest.TestCase):
  def setUp(self):self.c=Conn();self.settings=dict(host='example.invalid',dbname='postgres',user='fake',password='fake')
  def run_read(self):return read_stock(self.settings,'INTC',date(2026,10,12),lambda **kw:self.c)
  def test_read_and_cleanup(self):
-  r=self.run_read();self.assertEqual(r['rows'][0]['close'],'10.5');self.assertIsNone(r['rows'][0]['volume']);self.assertEqual(self.c.cleanup,['rollback','close']);self.assertEqual(len(self.c.sql),6)
+  r=self.run_read();self.assertEqual(r['rows'][0]['close'],'10.5');self.assertIsNone(r['rows'][0]['volume']);self.assertEqual(self.c.cleanup,['rollback','close']);self.assertEqual(len(self.c.sql),7)
  def test_duplicate_identity(self):
   self.c.identities*=2
   with self.assertRaises(DataUnavailable):self.run_read()
