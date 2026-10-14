@@ -382,7 +382,7 @@ with col9:
     )
 
 # -------------------------------------------------
-# ROW 4 — OPTIONS / POSITIONING
+# ROW 4 — OPTIONS / POSITIONING & STOCK RESEARCH
 # -------------------------------------------------
 
 col10, col11, col12 = st.columns(3)
@@ -433,6 +433,31 @@ with col11:
             <div class="dashboard-link">
                 👉 <a href="https://encore-earnings-instability-dashboard.streamlit.app/" target="_blank">
                     Open Earnings Instability Dashboard
+                </a>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+with col12:
+    st.markdown(
+        """
+        <div class="dashboard-card">
+            <div class="dashboard-title">📈 Stock Continuity Framework (SCFR)</div>
+            <div class="dashboard-subtitle">
+                Explore changing stock behavior across short, medium, and longer
+                trailing windows in a descriptive research pilot.
+            </div>
+            <ul class="dashboard-list">
+                <li>EncoreDB price and volume histories</li>
+                <li>Rolling 3, 9 and 27-session return analysis</li>
+                <li>Total and per-share price returns where evidence supports them</li>
+                <li>Data observations, coverage gaps and assumptions</li>
+            </ul>
+            <div class="dashboard-link">
+                👉 <a href="https://encore-scfr-dashboard.streamlit.app/" target="_blank" rel="noopener noreferrer">
+                    Open SCFR Dashboard
                 </a>
             </div>
         </div>
