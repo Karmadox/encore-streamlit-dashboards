@@ -7,6 +7,7 @@ if str(ROOT) not in sys.path:sys.path.insert(0,str(ROOT))
 from foundation_monitor.engine import validate,oracle_metrics,shadow_rules,contagion_state,capture_age_hours
 from foundation_monitor.store import read_snapshot
 from foundation_monitor.market import latest_market,comparable_index
+from foundation_monitor.context import equity_context
 from foundation_monitor.collect_gpu import history as gpu_history
 
 @st.cache_data(ttl=300)
@@ -46,6 +47,10 @@ try:market,gpu_captures=load_observations()
 except Exception:
  market,gpu_captures=None,[]
  st.error('Market/GPU capture store unavailable; missing data are not interpreted as no stress.')
+try:context=equity_context(market)
+except (ValueError,KeyError,TypeError):
+ context={'rows':[],'observations':[]}
+ st.error('Price-context calculation unavailable: retained inputs failed validation.')
 if st.button('Refresh retained observations'):
  load.clear();load_observations.clear();st.rerun()
 with st.expander('How to read this monitor',expanded=False):
@@ -58,6 +63,11 @@ a.metric('ORCL capex covered by OCF',f"{metrics['OCF coverage']:.1%}",help='Quar
 b.metric('Coverage excluding prepayments',f"{metrics['Coverage excluding specified prepayments']:.1%}")
 c.metric('ORCL capex less OCF',f"${metrics['Capex less operating cash flow']/1000:.3f}bn",help='Cash-flow gap before financing; not a forecast of required new capital.')
 st.write('**Review observations:** Oracle’s funding mix warrants monitoring; it does not itself establish credit deterioration. Applied Digital’s August-quarter revenue includes substantial fit-out activity; its October disclosure reports more delivered capacity. IREN financing depends on equipment acceptance. These are exposure channels to watch, not demonstrated contagion.')
+if context['observations']:
+ st.subheader('Recent equity observations')
+ for observation in context['observations']:st.write('• '+observation)
+ st.caption('Descriptive, unadjusted/ingestion-dependent stored-price comparisons. Five and twenty observation intervals are display windows, not calibrated thresholds or the SCFR 3/9/27 specification. Missing dates shared by every series cannot be detected without an exchange calendar. No total-return or causal claim is made.')
+ if market and capture_age_hours(market['retrieved_at'])>2:st.warning('These equity observations use a stale capture; consult coverage before interpreting them as current.')
 labels=['Oracle','Project finance','Applied Digital','Neocloud','GPU economics','Evidence & gaps']
 tabs=st.tabs(labels)
 def evidence(family):
@@ -104,6 +114,12 @@ with tabs[3]:
    if not index.empty:
     st.line_chart(index,width='stretch')
     st.caption('Stored close indexed to 100 on common first observed date '+str(index.index[0])+'. Gaps are not filled. This is price context, not a corporate-action-qualified return or contagion signal.')
+  if context['rows']:
+   st.subheader('Comparable recent price changes')
+   display=pd.DataFrame(context['rows'])[['ticker','end_date','start_5','change_5_pct','status_5','start_20','change_20_pct','status_20']]
+   st.dataframe(display,hide_index=True,width='stretch',column_config={'change_5_pct':st.column_config.NumberColumn('5-interval price change (%)',format='%.2f'),'change_20_pct':st.column_config.NumberColumn('20-interval price change (%)',format='%.2f')})
+   st.caption('100 × (end close / start close − 1). Every retained observation date inside a window must be present for that stock; missing values remain unavailable. All stocks use common endpoints. Percent changes can reflect corporate actions.')
+   st.download_button('Download price-context calculations',json.dumps(context,indent=2),'foundation_price_context.json','application/json')
   st.download_button('Download retained market observations',json.dumps(market,indent=2),'foundation_market.json','application/json')
  else:st.warning('UNAVAILABLE: retained EncoreDB market observations.')
  st.write('Checkpoint: verify Horizon 2–4 acceptance against contractual deadlines and grace periods before labelling a delay. Qualified total-return breadth and correlation remain unavailable.')
@@ -131,7 +147,19 @@ with tabs[5]:
  st.subheader('Unverified seeds — excluded from calculations')
  st.dataframe(pd.DataFrame(snapshot['unverified_seeds']),hide_index=True,width='stretch')
  st.download_button('Download evidence and provenance',json.dumps(snapshot,indent=2),'foundation_evidence.json','application/json')
- st.write('Remaining coverage: current credit conditions; five unmapped equity names; corporate-action-qualified returns; comparable deal terms; region/contract-matched GPU history. Subscription responses are pending and are not a dependency for reviewing this baseline.')
+ st.subheader('Refresh and coverage status')
+ health=[{'input':'Financial filings','latest_capture':snapshot['built_at'],'status':'CURATED — not automatically refreshed','coverage':'Quarter/date shown on each observation'}]
+ if market:
+  available_count=sum(r['status']=='STORED_CLOSE_AVAILABLE' for r in market['coverage'])
+  health.append({'input':'EncoreDB equity capture','latest_capture':market['retrieved_at'],'status':'STALE' if capture_age_hours(market['retrieved_at'])>2 else 'RECENT_CAPTURE','coverage':f'{available_count}/{len(market["coverage"])} stocks have recent stored closes; inspect per-stock dates'})
+ else:health.append({'input':'EncoreDB equity capture','status':'UNAVAILABLE'})
+ if gpu_captures:
+  latest=gpu_captures[0];success=next((g for g in gpu_captures if g['status']=='SUCCESS'),None)
+  health.append({'input':'GPU offer collection','latest_capture':latest['captured_at'],'status':'STALE_ATTEMPT' if capture_age_hours(latest['captured_at'])>25 else latest['status'],'coverage':'Last successful capture: '+(success['captured_at'] if success else 'none')+'; region/capacity unverified'})
+ else:health.append({'input':'GPU offer collection','status':'UNAVAILABLE'})
+ st.dataframe(pd.DataFrame(health),hide_index=True,width='stretch')
+ st.caption('A recent database capture does not mean the vendor refreshed its underlying prices. The previous New York date is the collection ceiling; future daily-loader success is not assumed.')
+ st.write('Remaining analytical gaps: current credit conditions; corporate-action-qualified returns; comparable deal terms; region/contract-matched GPU history. Equity identities are now mapped for all twelve names, but per-stock coverage and freshness can change. Subscription responses remain pending.')
 st.subheader('Shadow diagnostics')
 st.dataframe(pd.DataFrame(rules),hide_index=True,width='stretch')
 st.caption('Rules version shadow-1. Historical conditions are not current alerts. No calibrated severity, contagion escalation, digest, Slack notification or trade action is enabled.')
