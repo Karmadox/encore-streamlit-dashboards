@@ -1,6 +1,6 @@
 # AI Infrastructure Foundation Monitor — review release
 
-An evidence-backed first review inside Encore's private Azure Streamlit hub. All five signal families are visible. This release is a curated, source-reconciled baseline, not a continuously refreshed market monitor. Missing inputs block inferences; no paid feed, calibrated production threshold or notification is enabled.
+An evidence-backed first review inside Encore's private Azure Streamlit hub. All five signal families are visible. Financial disclosures are a curated, source-reconciled baseline; market captures refresh hourly from EncoreDB and public GPU offers are captured daily. Missing inputs block inferences; no paid feed, calibrated production threshold or notification is enabled.
 
 ## Ownership and storage
 
@@ -47,6 +47,16 @@ The private Azure app runs `python -m foundation_monitor.collect_gpu --loop` alo
 
 `market_captures` stores exact rows returned and a digest; `gpu_captures` stores captured offers or failures and links retained source bytes. The dashboard reads only these records; clicking Refresh does not call providers. Captures are append-only through the application contract, with no destructive expiry job. Future retention sizing and migration remain an engineering follow-up.
 
-Market scope is fixed to 12 monitored names and at most 180 calendar days through the preceding New York date. Unknown/ambiguous mappings, invalid prices and stale observations are explicit. Available prices are indexed from a common observed start date for selected names. These are stored-close comparisons, not total returns or a qualified contagion measure. No dividend/split assumptions, missing-date fill, breadth inference or security-master write is introduced. Five names currently have no instrument mapping.
+Market scope is fixed to 12 monitored names and at most 180 calendar days through the preceding New York date. Unknown/ambiguous mappings, invalid prices and stale observations are explicit. Available prices are indexed from a common observed start date for selected names. These are stored-close comparisons, not total returns or a qualified contagion measure. No dividend/split assumptions, missing-date fill, breadth inference or security-master write is introduced. At v2 launch, five names had no instrument mapping; the coverage update below resolves that gap.
 
 Lambda's parser binds the visible 8x tab to its rows and records GPU model/count, VRAM, CPU/RAM/storage and price units. Unknown geography, interconnect and live availability remain unknown. Schema changes fail rather than silently substitute a configuration. One capture day cannot establish a trend. A collection age above 25 hours and a market capture age above two hours are operational freshness labels, not market thresholds.
+
+## Equity coverage update — October 16, 2026
+
+Bloomberg Desktop API confirmed the current ticker, name, USD currency, common-stock type and FIGI for APLD, CIFR, CORZ, IREN and WULF. The private bounded operator script (retained with execution evidence, outside this public repository) then added only those five previously absent identities and 625 closing-price rows to the existing EncoreDB tables: 125 observations per name from April 20 through October 15, 2026. No existing identity or price row was overwritten. The exact returned prices, request adjustment settings, capture timestamp and identity references are retained under a SHA-256 in `foundation_monitor.equity_backfills`.
+
+The backfill explicitly disabled DPDF, dividend and split adjustment. Existing series and later scheduled loads retain their own ingestion conventions; this is still stored-price context, not a homogeneous qualified return series. Corporate-action validation and historical listing/availability qualification remain separate. Historical identity changes are not ruled out by current identity confirmation.
+
+The existing general Equity Price Loader selects the instrument master in the retained repository source. Its Windows task was Ready, last result 0, with its next run scheduled for October 16 at 18:30 (VM scheduler time). The five new identities are therefore eligible for that loader without adding a duplicate scheduled job. This does not certify the next run's outcome; inspect subsequent data timestamps before claiming continued freshness. The hourly monitor collector consumes the stored prices and retains coverage separately.
+
+The onboarding script is deliberately not a recurring job: an existing identity causes refusal before writes. Its transaction binds identity inserts, price inserts and the retained receipt together. Operators must review a new universe/date scope rather than rerun this completed five-name backfill.
