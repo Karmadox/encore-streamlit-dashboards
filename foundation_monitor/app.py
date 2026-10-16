@@ -34,6 +34,17 @@ def load_observations():
   return market,gpu
  finally:conn.close()
 
+@st.cache_data(ttl=300)
+def load_filings():
+ import os
+ if os.environ.get('FOUNDATION_MONITOR_DB')!='1':return []
+ import psycopg2
+ from foundation_monitor.filings import latest
+ config=dict(st.secrets['db']);config.update(connect_timeout=10,sslmode='require')
+ conn=psycopg2.connect(**config)
+ try:return latest(conn)
+ finally:conn.close()
+
 st.title('AI Infrastructure Foundation Monitor')
 st.caption('Review release · Evidence first · Shadow diagnostics only')
 try:snapshot,storage=load()
@@ -42,7 +53,7 @@ except Exception:
 rows=snapshot['observations'];rules=shadow_rules(rows);metrics=oracle_metrics(rows)
 st.warning('Contagion assessment: '+contagion_state(rules)+' — the available evidence cannot establish whether CRWV stress is isolated or spreading.')
 st.caption(f"{storage} | Evidence captured {snapshot['built_at'][:10]} | {snapshot['snapshot_id']}")
-st.info('Filing evidence is curated. EncoreDB closes are retained hourly and public GPU offers daily. Credit feeds and qualified total-return breadth remain unavailable. Capture times do not establish historical customer availability.')
+st.info('Filing figures are curated; a separate daily SEC watch discovers documents for review. EncoreDB closes are retained hourly and public GPU offers daily. Credit feeds and qualified total-return breadth remain unavailable. Capture times do not establish historical customer availability.')
 try:market,gpu_captures=load_observations()
 except Exception:
  market,gpu_captures=None,[]
@@ -51,8 +62,12 @@ try:context=equity_context(market)
 except (ValueError,KeyError,TypeError):
  context={'rows':[],'observations':[]}
  st.error('Price-context calculation unavailable: retained inputs failed validation.')
+try:filing_captures=load_filings()
+except Exception:
+ filing_captures=[]
+ st.error('Disclosure watch unavailable. This does not mean no new filings.')
 if st.button('Refresh retained observations'):
- load.clear();load_observations.clear();st.rerun()
+ load.clear();load_observations.clear();load_filings.clear();st.rerun()
 with st.expander('How to read this monitor',expanded=False):
  st.write('Start with the observations below, then inspect each family. Reconciled means checked against the cited document—not independently audited or current. A historical filing remains historical even when downloaded today. Open the evidence register for dates, source locations and hashes.')
  st.write('UNAVAILABLE means an input is absent. INSUFFICIENT_EVIDENCE means the available input cannot support the requested inference. Neither means no stress. Shadow diagnostics never send notifications or drive trading decisions.')
@@ -140,6 +155,16 @@ with tabs[4]:
  st.warning('INSUFFICIENT_EVIDENCE: no region-matched 4-week history, live availability, H200 comparable offer or resale series. Vast’s marketplace has not been normalized into comparable offers. Listing counts are not capacity.')
  st.markdown('[Vast pricing source](https://vast.ai/pricing) · captured in source register; excluded from comparisons.')
 with tabs[5]:
+ st.subheader('Disclosure watch · documents awaiting review')
+ st.caption('Daily SEC recent-index checks for ORCL, APLD, IREN and CRWV. Selected periodic/current reports and amendments from the last 90 calendar days. Baseline means present at first capture, not newly published. Newly observed means first detected by this monitor. No exhibits or full text are automatically retrieved; no financial figures or shadow rules are updated from discovery alone.')
+ if filing_captures:
+  st.dataframe(pd.DataFrame([{'ticker':f['ticker'],'captured_at':f['captured_at'],'status':f['status'],'rows':len(f['rows']),'freshness':'STALE' if capture_age_hours(f['captured_at'])>25 else 'RECENT_ATTEMPT'} for f in filing_captures]),hide_index=True,width='stretch')
+  filing_rows=[r for f in filing_captures if f['status']=='SUCCESS' for r in f['rows']]
+  if filing_rows:
+   st.dataframe(pd.DataFrame(filing_rows).sort_values(['filing_date','ticker'],ascending=[False,True])[['ticker','form','filing_date','sec_acceptance_time','first_observed_at','discovery_status','review_status','url']],hide_index=True,width='stretch',column_config={'url':st.column_config.LinkColumn('SEC document')})
+  st.download_button('Download disclosure-watch provenance',json.dumps(filing_captures,indent=2),'foundation_disclosures.json','application/json')
+ else:st.warning('UNAVAILABLE: no retained disclosure-watch captures.')
+ st.caption('Failed checks do not establish absence of filings. A successful empty result means no matching forms in the returned index/window, not no relevant developments. SEC acceptance time and our first observation are distinct; neither reconstructs historical customer availability. Financial evidence below remains separately curated; the discovery status does not replace its fact-level verification records.')
  st.subheader('Evidence register and revision timeline')
  st.caption('Snapshot v2 extends v1; earlier source facts and originals remain retained. New-period facts are separate observations, not corrections. Market and GPU captures are append-only through the collector; no earlier availability is implied.')
  st.dataframe(pd.DataFrame(rows)[['id','kind','period','retrieved_at','quality','locator','source_url','source_sha256','revision','supersedes']],hide_index=True,width='stretch',column_config={'source_url':st.column_config.LinkColumn('Source')})

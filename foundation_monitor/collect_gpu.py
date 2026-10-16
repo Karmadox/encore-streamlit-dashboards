@@ -65,6 +65,17 @@ def main(loop=False):
   finally:
    if conn:conn.close()
   print(json.dumps({'worker':'foundation_gpu','status':status,'checked_at':datetime.now(timezone.utc).isoformat()}),flush=True)
+  # Disclosure discovery is isolated from GPU/market failures and each issuer is independent.
+  from .filings import ISSUERS,capture_one
+  for ticker in ISSUERS:
+   filing_conn=None
+   try:
+    filing_conn=psycopg2.connect(**configuration());filing_status=capture_one(filing_conn,ticker)
+   except Exception:filing_status='STORAGE_OR_CONFIGURATION_UNAVAILABLE'
+   finally:
+    if filing_conn:filing_conn.close()
+   print(json.dumps({'worker':'foundation_filings','ticker':ticker,'status':filing_status,'checked_at':datetime.now(timezone.utc).isoformat()}),flush=True)
+   time.sleep(1) # Far below SEC's fair-access rate; no application retry within a check.
   if not loop:return
   time.sleep(3600) # Hourly due check; at most one persisted public request per 24h, failures included.
 if __name__=='__main__':
