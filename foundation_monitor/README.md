@@ -38,3 +38,15 @@ For the Azure hub add `foundation_monitor/app.py` to `reports.json` with title `
 ## Next iteration
 
 Reconcile current CRWV and APLD source material, retain repeated GPU observations with matched geography/contract/configuration, and connect existing qualified market series. Add a scheduled capture/import job after reviewing this initial evidence surface. Provider subscriptions, live notifications and calibrated thresholds remain outside this approval.
+
+## Review update v2 — October 16, 2026
+
+The second evidence snapshot preserves v1 and adds ten facts from CoreWeave's August 11 quarterly release and Applied Digital's October 7 release. New-period facts do not replace older-period facts. Publication dates are known for these releases, but exact publication timestamps and historical customer availability remain unverified. No claim is made that this is an exhaustive search of subsequent disclosures.
+
+The private Azure app runs `python -m foundation_monitor.collect_gpu --loop` alongside Streamlit. It checks hourly, retains an EncoreDB market capture at most once per 55 minutes, and requests Lambda's public page at most once per 24 hours (failed attempts count). PostgreSQL advisory locks prevent duplicate concurrent collectors. Existing app settings supply database credentials in memory. The app's existing Always On setting is required for continuous operation; collection pauses when the app is stopped. Collector statuses are written to the protected Azure LogFiles directory. No notifications are sent. This is a lightweight first collector, not a separately managed worker service.
+
+`market_captures` stores exact rows returned and a digest; `gpu_captures` stores captured offers or failures and links retained source bytes. The dashboard reads only these records; clicking Refresh does not call providers. Captures are append-only through the application contract, with no destructive expiry job. Future retention sizing and migration remain an engineering follow-up.
+
+Market scope is fixed to 12 monitored names and at most 180 calendar days through the preceding New York date. Unknown/ambiguous mappings, invalid prices and stale observations are explicit. Available prices are indexed from a common observed start date for selected names. These are stored-close comparisons, not total returns or a qualified contagion measure. No dividend/split assumptions, missing-date fill, breadth inference or security-master write is introduced. Five names currently have no instrument mapping.
+
+Lambda's parser binds the visible 8x tab to its rows and records GPU model/count, VRAM, CPU/RAM/storage and price units. Unknown geography, interconnect and live availability remain unknown. Schema changes fail rather than silently substitute a configuration. One capture day cannot establish a trend. A collection age above 25 hours and a market capture age above two hours are operational freshness labels, not market thresholds.

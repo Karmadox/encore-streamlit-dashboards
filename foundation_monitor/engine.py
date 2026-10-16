@@ -17,9 +17,9 @@ def shadow_rules(rows):
  return [dict(rule='ORCL_OCF_BELOW_CAPEX',status='OBSERVED_HISTORICAL_CONDITION' if metrics['Capex less operating cash flow']>0 else 'NOT_OBSERVED',basis='Quarter ended 2026-08-31; OCF < capex',evidence='orcl_ocf, orcl_capex',version=RULE_VERSION),
  dict(rule='ORCL_CREDIT_WIDENING',status='UNAVAILABLE',basis='No qualified CDS/OAS series',evidence='None',version=RULE_VERSION),
  dict(rule='PROJECT_TERMS_DETERIORATION',status='INSUFFICIENT_EVIDENCE',basis='No comparable prior financing terms',evidence='iren_facility, iren_rate, iren_tenor',version=RULE_VERSION),
- dict(rule='APLD_PAYMENT_DETERIORATION',status='INSUFFICIENT_EVIDENCE',basis='Historical quarter only; no current payment series',evidence='apld_payment, apld_rent',version=RULE_VERSION),
+ dict(rule='APLD_PAYMENT_DETERIORATION',status='INSUFFICIENT_EVIDENCE',basis='Revenue/milestones disclosed; no payment-delinquency series',evidence='apld_q127_rent, apld_q127_fitout, apld_capacity_oct',version=RULE_VERSION),
  dict(rule='NEOCLOUD_BREADTH',status='UNAVAILABLE',basis='No qualified basket price/credit history',evidence='None',version=RULE_VERSION),
- dict(rule='GPU_FOUR_WEEK_DECLINE',status='INSUFFICIENT_EVIDENCE',basis='Single advertised-offer capture; region and availability unknown',evidence='lambda_h100, lambda_b200',version=RULE_VERSION)]
+ dict(rule='GPU_FOUR_WEEK_DECLINE',status='INSUFFICIENT_EVIDENCE',basis='Region, availability and comparable four-week history not established',evidence='lambda_h100, lambda_b200',version=RULE_VERSION)]
 def contagion_state(rules):
  # This review release deliberately has no calibrated contagion classifier.
  return 'INSUFFICIENT_EVIDENCE'
