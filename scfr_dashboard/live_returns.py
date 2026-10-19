@@ -188,6 +188,20 @@ def render(result,settings):
     except EvidenceUnavailable as exc:
         st.warning(str(exc));return
     st.caption(f'Corporate-action evidence through {evidence_end} · Display origin through {analysis["end"]}.')
+    if ticker in REFRESH_STOCKS:
+        review=result.get('daily_review') or {}
+        monitor=review.get('exception_monitor',{}).get(ticker)
+        with st.expander('Daily dividend and distribution monitoring',expanded=False):
+            if not monitor:
+                st.write('The daily monitor has not yet supplied a result for this stock. The fixed return-evidence cutoff remains in force.')
+            else:
+                st.write(f'Captured: {review.get("captured_at", "Unknown")} · Observed through: {monitor.get("observed_through", "Unknown")}.')
+                if monitor.get('status')=='NO_CHANGE_OBSERVED':
+                    st.write('No change observed against the reconciled dividend baseline in this capture.')
+                else:
+                    st.warning('The daily monitor flagged an exception for review.')
+                    st.write(', '.join(monitor.get('reasons',[])) or 'No reason supplied.')
+                st.write('This compares capital-change-adjusted DVD_HIST_ALL amounts with the retained raw-dividend baseline. DVD_CRNCY is supporting current currency information, not event-level currency. An unchanged result does not establish no-split coverage or extend returns.')
     if analysis['end']<latest_price:
         st.info(f'Prices extend beyond the displayed returns ({latest_price} versus origin {analysis["end"]}). This reflects the evidence boundary or your comparison-date selection, not missing newer prices.')
     with st.expander('Evidence freshness and limitations',expanded=False):
