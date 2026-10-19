@@ -2,11 +2,37 @@
 import base64,hashlib,json,zlib
 from datetime import date, timedelta
 from fractions import Fraction
+from pathlib import Path
 from model import features,panel_status,SCALES
 
 SUPPORTED=('CHTR','CNC','ELV','HUM','INTC','MOH','T','TMUS','UNH','VZ')
 CUTOFF='2026-10-12'
+REFRESH_STOCKS=('CHWY','DELL','ZTS')
+REFRESH_HASH='024d8dd827777be89ec2559f4827e87665d744e303fc8e7dd1c0034c6cd75301'
+REFRESH_PATH=Path(__file__).with_name('private_three_stock_evidence.json')
 class EvidenceUnavailable(ValueError):pass
+
+def load_refresh():
+    try:
+        raw=REFRESH_PATH.read_bytes()
+        if len(raw)>200000 or hashlib.sha256(raw).hexdigest()!=REFRESH_HASH:raise ValueError()
+        e=json.loads(raw)
+        if e['version']!=2 or e['end']!='2026-10-16' or sorted(e['stocks'])!=list(REFRESH_STOCKS):raise ValueError()
+        c=e['split_confirmation']
+        if c['start']!='2024-10-01' or c['end']!=e['end'] or c['no_splits_or_consolidations'] is not True:raise ValueError()
+        if c['basis']!='user_supplied_bloomberg_confirmation':raise ValueError()
+        sessions=e['sessions']
+        if sessions!=sorted(set(sessions)) or sessions[0]!='2024-10-01' or sessions[-1]!=e['end']:raise ValueError()
+        for day in sessions:date.fromisoformat(day)
+        for events in e['stocks'].values():
+            seen=set()
+            for event in events:
+                day=event['ex_date']
+                if day in seen or day not in sessions or event['currency']!='USD' or Fraction(event['amount'])<=0:raise ValueError()
+                seen.add(day)
+        return e
+    except Exception:
+        raise EvidenceUnavailable('Refreshed action evidence is missing or invalid; returns withheld.') from None
 
 def load_evidence(settings, *, dell=False):
     try:
@@ -32,7 +58,7 @@ def load_evidence(settings, *, dell=False):
         raise EvidenceUnavailable('Return evidence is missing or invalid. Prices and volume remain available.') from None
 
 def calculate(observations,ticker,evidence):
-    if ticker not in (*SUPPORTED,'DELL'):raise EvidenceUnavailable('Return history is not yet enabled for this stock.')
+    if ticker not in (*SUPPORTED,*REFRESH_STOCKS):raise EvidenceUnavailable('Return history is not yet enabled for this stock.')
     bydate={r['date']:r for r in observations}
     if len(bydate)!=len(observations):raise EvidenceUnavailable('Duplicate price dates; returns withheld.')
     end=min(evidence['end'],max(bydate,default='2024-10-01'))
@@ -118,10 +144,15 @@ def prepare_analysis(result, settings, comparison_origin=None):
     """Resolve evidence first; a requested common origin must never silently shift."""
     ticker=result['ticker']
     if ticker=='CMCSA':raise EvidenceUnavailable('CMCSA returns remain deferred for the Versant spin-off. Prices and volume are available.')
-    if ticker not in (*SUPPORTED,'DELL'):
+    if ticker not in (*SUPPORTED,*REFRESH_STOCKS):
         raise EvidenceUnavailable(f'{ticker}: split-history evidence is unresolved. New prices do not establish no-split coverage; returns remain withheld.')
     if settings is None:raise EvidenceUnavailable('Private return evidence is not configured. Prices and volume remain available.')
-    if ticker=='DELL':
+    if ticker in REFRESH_STOCKS and REFRESH_PATH.exists():
+        evidence=load_refresh()
+        note='Raw cash-dividend views reconciled through 16 October 2026. No-split coverage for CHWY, DELL and ZTS is based on the listing/date-specific Bloomberg confirmation supplied by Rob. Workbook execution time was not recorded. This fixed evidence package does not extend automatically.'
+    elif ticker in ('CHWY','ZTS'):
+        raise EvidenceUnavailable('Refreshed action evidence is not installed; returns withheld.')
+    elif ticker=='DELL':
         evidence=load_evidence({'evidence_zlib_base64':settings.get('dell_evidence_zlib_base64'),'evidence_sha256':settings.get('dell_evidence_sha256')},dell=True)
         note='DELL uses separately reconciled cash dividends through 12 October and the supplied no-split confirmation through 13 October. Later return origins require renewed action evidence.'
     else:
@@ -176,7 +207,7 @@ def render(result,settings):
         st.dataframe(pd.DataFrame(latest).style.format({'Total return':'{:.2%}','Per-share price return':'{:.2%}'},na_rep='Unavailable'),hide_index=True,use_container_width=True)
     with st.expander('How to read the returns',expanded=False):
         st.write('Total return includes evidenced cash dividends on ex-date. Per-share price return excludes cash dividends. The window length is 3, 9 or 27 trading sessions; each window is recalculated at every session, so charts retain daily granularity. Daily total returns are rounded half-even to 18 decimal places before compounding. Missing sessions remain missing.')
-        st.write('These are current-vintage descriptive histories. No in-window splits were returned for the daily-enabled stocks; DELL instead uses the separately recorded, date-bounded Bloomberg confirmation supplied by Rob. Other corporate-action coverage is not certified. Returns extend only after daily action and unadjusted-price reconciliation succeeds. New or revised actions hold the affected stock for review.')
+        st.write('These are current-vintage descriptive histories. No in-window splits were returned for the daily-enabled stocks. CHWY, DELL and ZTS use separately recorded, date-bounded Bloomberg confirmation supplied by Rob. Other corporate-action coverage is not certified. Their fixed evidence cutoff does not extend automatically. Daily-enabled stocks extend only after action and unadjusted-price reconciliation succeeds; new or revised actions require review.')
     for h,p in analysis['panels'].items():
         st.markdown(f'**{h}-session returns**')
         chart=[]
