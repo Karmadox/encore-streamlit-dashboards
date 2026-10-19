@@ -37,6 +37,8 @@ def render():
         st.warning(f'{ticker}: no retained rows in the requested interval.')
         return
     st.subheader(f'Currently showing: {ticker}')
+    if ticker=='SPCX':
+        st.info(f'Short retained history: observations begin {rows[0]["date"]}. Earlier absence is not automatically an ingestion gap or a verified listing date.')
     st.caption(f'Latest retained date: {rows[-1]["date"]} | Database read (UTC): {result["queried_at"]} | Update report bypasses the five-minute cache. It does not run ingestion or request Bloomberg data.')
     with st.expander('How to read this report',expanded=False):
         st.write('Prices and volume come directly from EncoreDB after login. Each point represents a stored date. The app excludes the current New York day, retains null values and never fills gaps. Stored-date coverage is not a claim of complete trading-session coverage.')
