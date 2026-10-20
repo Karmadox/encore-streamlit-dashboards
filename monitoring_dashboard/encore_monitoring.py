@@ -306,6 +306,9 @@ def load_task_status():
             ):
                 return "🟠 MISSED SCHEDULE"
 
+        if row["status"] == "SUCCESS_WITH_WARNINGS":
+            return "🟠 COMPLETED WITH DATA WARNINGS"
+
         return "🟢 HEALTHY"
 
     df["health"] = df.apply(health, axis=1)
@@ -469,6 +472,7 @@ with tabs[2]:
             - 🟢 HEALTHY (WINDOWS) → Windows ran, script not logging  
             - 🟠 MISSED SCHEDULE → Script logging exists and missed next scheduled run  
             - 🔴 WINDOWS FAILED → Task Scheduler failure  
+            - 🟠 COMPLETED WITH DATA WARNINGS → Processing completed; reviewed historical input gaps remain withheld
             - 🔴 SCRIPT FAILED → Python execution failure  
             - 🟡 RUNNING → Currently executing  
             - ⚪ DISABLED → Disabled in Windows Task Scheduler  
